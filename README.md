@@ -55,36 +55,45 @@ This prints the booking system found, the date pattern, and the free tee times. 
 npm test     # parser unit tests + the headless-browser tee-sheet test
 ```
 
-## Deploy on your own Linux server (e.g. Contabo VPS)
+## Deploy on your own Linux server (e.g. Contabo VPS) alongside nginx
 
-You need a server with at least 2 GB of RAM, plus Docker and the Docker Compose plugin. Ubuntu or Debian are fine.
+This setup is for a server that already runs nginx on ports 80 and 443 (for example with Mautic and other sites). The app runs in Docker and listens only on `127.0.0.1:3080`. nginx proxies your subdomain to it, and certbot adds HTTPS. Your other sites are untouched.
 
-1. **Point a domain at the server.** At your DNS provider (e.g. 123 Reg), add an **A record** for a subdomain such as `golf.yourdomain.co.uk`, pointing to the server's IP address.
-2. **Open the web ports.** Make sure ports 80 and 443 are open in the server's firewall:
-   ```bash
-   sudo ufw allow 80,443/tcp
-   ```
-3. **Get the code onto the server:**
+**Before you start**
+- **Docker and the Compose plugin** must be installed.
+- **Check free memory with `free -h`.** The app needs about 1–1.5 GB for its headless browser, and is capped at 1.5 GB so it can't starve Mautic. If less than about 1.5 GB is free, keep `MAX_BROWSER_PAGES=2`, or add swap.
+- **Check port 3080 is free** with `ss -ltnp | grep 3080`. If it isn't, set `APP_PORT` in `.env`, and change the port in the nginx file to match.
+
+**Steps**
+1. **DNS:** at 123 Reg (or wherever the domain is), add an **A record** for e.g. `golf.yourdomain.co.uk` pointing to the server's IP.
+2. **Start the app:**
    ```bash
    git clone https://github.com/<you>/fairway-tour.git && cd fairway-tour
-   cp .env.example .env && nano .env   # set DOMAIN, CONTACT_EMAIL, PUBLIC_URL (+ optional keys)
+   cp .env.example .env && nano .env      # DOMAIN, CONTACT_EMAIL, PUBLIC_URL=https://golf.yourdomain.co.uk
    docker compose up -d --build
+   curl -s http://127.0.0.1:3080/api/health    # should print {"ok":true,...}
    ```
-4. **Open your domain.** Caddy gets an HTTPS certificate automatically. On first start, the server imports the UK & Ireland course directory in the background, which takes about 5 minutes. Watch progress with `docker compose logs -f app`.
-5. **To update after new code is pushed:**
+3. **Add the nginx site.** First edit `deploy/nginx-fairway.conf` and put your subdomain in the 2 places marked. Then:
    ```bash
-   git pull && docker compose up -d --build
+   sudo cp deploy/nginx-fairway.conf /etc/nginx/sites-available/fairway
+   sudo ln -s /etc/nginx/sites-available/fairway /etc/nginx/sites-enabled/fairway
+   sudo nginx -t && sudo systemctl reload nginx
+   sudo certbot --nginx -d golf.yourdomain.co.uk
    ```
-6. **Optionally, pre-find booking systems** for 500 clubs at a time:
-   ```bash
-   docker compose exec app npm run detect:booking -- 500
-   ```
-7. **To test one club's live tee times:**
-   ```bash
-   docker compose exec app npm run check -- "Cruden Bay" 2026-12-07
-   ```
+4. **Open your subdomain.** On first start, the app imports the UK & Ireland course directory in the background, which takes about 5 minutes. Watch with `docker compose logs -f app`.
 
-If something else on the server already uses ports 80 and 443 (for example nginx), remove the `caddy` service from `docker-compose.yml`. Then publish the app's port with `ports: ["127.0.0.1:3000:3000"]` and point your existing proxy at it.
+**Day to day**
+```bash
+git pull && docker compose up -d --build                          # update
+docker compose exec app npm run check -- "Cruden Bay" 2026-12-07  # test one club's live tee times
+docker compose exec app npm run detect:booking -- 500             # pre-find booking systems for 500 clubs
+```
+The database lives in the Docker volume `fairway-data`. Back it up with:
+```bash
+docker run --rm -v fairway-tour_fairway-data:/d -v $PWD:/b alpine tar czf /b/fairway-backup.tgz -C /d .
+```
+
+**Fresh server with nothing on ports 80 and 443?** Run `docker compose --profile caddy up -d --build` instead. Caddy then handles HTTPS by itself, and you skip step 3.
 
 ## Deploy on Render
 

@@ -1,8 +1,13 @@
-# Run on your own Linux server (e.g. a Contabo VPS):
+# Run on your own Linux server (e.g. a Contabo VPS).
+#
+# Server already running nginx (default):
 #   cp .env.example .env   (set DOMAIN, CONTACT_EMAIL, PUBLIC_URL, keys)
 #   docker compose up -d --build
-# Caddy gets an HTTPS certificate for DOMAIN automatically (ports 80 and 443 must be open,
-# and the domain's DNS A record must point at this server).
+#   -> the app listens on 127.0.0.1:${APP_PORT:-3080} only; nginx proxies your domain to it
+#      (see deploy/nginx-fairway.conf).
+#
+# Fresh server with nothing on ports 80/443: add Caddy for automatic HTTPS:
+#   docker compose --profile caddy up -d --build
 services:
   app:
     build: .
@@ -12,12 +17,14 @@ services:
       PORT: "3000"
     volumes:
       - fairway-data:/data
+    ports:
+      - "127.0.0.1:${APP_PORT:-3080}:3000"   # only reachable from this server (nginx)
     shm_size: "1gb"          # Chromium needs more shared memory than Docker's 64 MB default
+    mem_limit: "1500m"       # keeps the headless browser from starving Mautic and your other sites
     restart: unless-stopped
-    expose:
-      - "3000"
 
   caddy:
+    profiles: ["caddy"]
     image: caddy:2.8.4
     depends_on: [app]
     ports:
