@@ -1,0 +1,37 @@
+# Run on your own Linux server (e.g. a Contabo VPS):
+#   cp .env.example .env   (set DOMAIN, CONTACT_EMAIL, PUBLIC_URL, keys)
+#   docker compose up -d --build
+# Caddy gets an HTTPS certificate for DOMAIN automatically (ports 80 and 443 must be open,
+# and the domain's DNS A record must point at this server).
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      PORT: "3000"
+    volumes:
+      - fairway-data:/data
+    shm_size: "1gb"          # Chromium needs more shared memory than Docker's 64 MB default
+    restart: unless-stopped
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2.8.4
+    depends_on: [app]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  fairway-data:
+  caddy-data:
+  caddy-config:

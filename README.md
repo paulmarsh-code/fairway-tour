@@ -55,7 +55,38 @@ This prints the booking system found, the date pattern, and the free tee times. 
 npm test     # parser unit tests + the headless-browser tee-sheet test
 ```
 
-## Deploy on Render (recommended)
+## Deploy on your own Linux server (e.g. Contabo VPS)
+
+You need a server with at least 2 GB of RAM, plus Docker and the Docker Compose plugin. Ubuntu or Debian are fine.
+
+1. **Point a domain at the server.** At your DNS provider (e.g. 123 Reg), add an **A record** for a subdomain such as `golf.yourdomain.co.uk`, pointing to the server's IP address.
+2. **Open the web ports.** Make sure ports 80 and 443 are open in the server's firewall:
+   ```bash
+   sudo ufw allow 80,443/tcp
+   ```
+3. **Get the code onto the server:**
+   ```bash
+   git clone https://github.com/<you>/fairway-tour.git && cd fairway-tour
+   cp .env.example .env && nano .env   # set DOMAIN, CONTACT_EMAIL, PUBLIC_URL (+ optional keys)
+   docker compose up -d --build
+   ```
+4. **Open your domain.** Caddy gets an HTTPS certificate automatically. On first start, the server imports the UK & Ireland course directory in the background, which takes about 5 minutes. Watch progress with `docker compose logs -f app`.
+5. **To update after new code is pushed:**
+   ```bash
+   git pull && docker compose up -d --build
+   ```
+6. **Optionally, pre-find booking systems** for 500 clubs at a time:
+   ```bash
+   docker compose exec app npm run detect:booking -- 500
+   ```
+7. **To test one club's live tee times:**
+   ```bash
+   docker compose exec app npm run check -- "Cruden Bay" 2026-12-07
+   ```
+
+If something else on the server already uses ports 80 and 443 (for example nginx), remove the `caddy` service from `docker-compose.yml`. Then publish the app's port with `ports: ["127.0.0.1:3000:3000"]` and point your existing proxy at it.
+
+## Deploy on Render
 
 1. Push this folder to a GitHub repo.
 2. In Render, choose **New → Blueprint** and pick the repo. `render.yaml` sets up a Docker web service on the **Standard** plan, which has the 2 GB memory Chromium needs, plus a 1 GB disk for the database.
