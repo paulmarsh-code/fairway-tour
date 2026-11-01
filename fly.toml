@@ -1,0 +1,35 @@
+# Fly.io alternative to Render.
+#   fly launch --no-deploy   (keep this file)
+#   fly volumes create fairway_data --size 1 --region lhr
+#   fly secrets set CONTACT_EMAIL=you@example.com ANTHROPIC_API_KEY=... ADMIN_TOKEN=...
+#   fly deploy
+app = "fairway-tour"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DATA_DIR = "/data"
+  PORT = "3000"
+
+[mounts]
+  source = "fairway_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[http_service.checks]]
+  path = "/api/health"
+  interval = "30s"
+  timeout = "5s"
+
+[[vm]]
+  memory = "2gb"
+  cpu_kind = "shared"
+  cpus = 1

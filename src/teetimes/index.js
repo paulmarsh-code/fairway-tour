@@ -1,0 +1,163 @@
+// Live tee times: open each club's own visitor booking page for a date in a headless browser,
+// read what is shown as free, and cache it briefly. Read-only: never books, holds or submits anything.
+import { config } from "../config.js";
+import { q, rowToCourse } from "../db.js";
+import { withPage, open, pageText, pageLinks } from "../browser.js";
+import { aiEnabled, askJson } from "../ai.js";
+import { parseRows, parseText, dateShown, fillTemplate } from "./parse.js";
+import { systemById, detectSystem, templateFromDatedUrl } from "./systems.js";
+
+const LOGIN = /\b(log ?in|sign ?in|password|member number|register to book)\b/i;
+
+/** Collect candidate tee-time rows from the rendered DOM. Runs inside the page. */
+async function extractRows(page) {
+  return page.evaluate(() => {
+    const TIME = /\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/;
+    const out = [], seen = new Set();
+    for (const el of document.querySelectorAll("body *")) {
+      if (el.children.length > 2) continue;
+      const own = (el.textContent || "").trim();
+      if (own.length > 14 || !TIME.test(own)) continue;
+      if (el.offsetParent === null && getComputedStyle(el).position !== "fixed") continue; // hidden
+      let row = el;
+      for (let i = 0; i < 6 && row.parentElement; i++) {
+        row = row.parentElement;
+        if ((row.innerText || "").length > own.length + 12) break;
+      }
+      if (seen.has(row)) continue;
+      seen.add(row);
+      const text = (row.innerText || "").replace(/\s+/g, " ").trim().slice(0, 300);
+      // Skip containers that hold several different times (whole tables), keep row-sized ones
+      const times = text.match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/g) || [];
+      if (new Set(times).size > 2) continue;
+      const action = row.querySelector("button:not([disabled]), a[href]:not([href='#']), [role=button]:not([aria-disabled=true]), input[type=submit]:not([disabled])");
+      const cls = typeof row.className === "string" ? row.className.toLowerCase() : "";
+      const disabledHint = /\b(disabled|unavailable|booked|blocked|closed|full)\b/.test(cls) || !!row.querySelector("[aria-disabled=true]") && !action;
+      out.push({ time: own.match(TIME)[0], text, hasAction: !!action, disabledHint });
+      if (out.length >= 500) break;
+    }
+    return out;
+  }).catch(() => []);
+}
+
+async function readSheet(page, course, url, date, players) {
+  await open(page, url);
+  const text = await pageText(page, 20000);
+  const shown = dateShown(text, date);
+  let times = parseRows(await extractRows(page), { players });
+  if (!times.length) times = parseText(text, { players });
+  let note = "";
+
+  if (!times.length && shown && aiEnabled() && /\b([01]?\d|2[0-3])[:.][0-5]\d\b/.test(text)) {
+    try {
+      const j = await askJson(`Visible text of the live visitor booking page for ${course.name}, opened for ${date}. A group of ${players} wants to play.
+List tee times shown as AVAILABLE to book on ${date} (ignore booked/closed/member-only times and other dates) with the visitor price per player if shown.
+Reply only JSON: {"times":[{"time":"HH:MM","price":number|null,"spaces":number|null}],"note":"short"}
+PAGE TEXT:
+${text.slice(0, 14000)}`, { maxTokens: 1500 });
+      times = (Array.isArray(j.times) ? j.times : []).map(t => ({ time: String(t.time).slice(0, 5), price: Number.isFinite(+t.price) && t.price !== null ? +t.price : null, spaces: Number.isFinite(+t.spaces) && t.spaces !== null ? +t.spaces : null }))
+        .filter(t => /^\d{2}:\d{2}$/.test(t.time) && (t.spaces == null || t.spaces >= players));
+      note = String(j.note || "").slice(0, 140);
+    } catch { /* fall through */ }
+  }
+
+  let status;
+  if (times.length) status = shown ? "available" : "unverified_date";
+  else if (!shown && LOGIN.test(text)) status = "login";
+  else if (!shown) status = "wrong_date";
+  else status = "none";
+  return { status, times: status === "unverified_date" ? times : times, note, url };
+}
+
+/** Find (and remember) a URL template that opens this course's tee sheet for any date. */
+async function resolveTemplate(page, row, date) {
+  if (row.date_template) return row.date_template;
+  const bookingUrl = row.booking_url;
+  const cands = [];
+  const sys = systemById(row.booking_system) || detectSystem(bookingUrl);
+  if (sys) { try { cands.push(...sys.candidates(bookingUrl)); } catch {} }
+  const dated = templateFromDatedUrl(bookingUrl);
+  if (dated) cands.unshift(dated);
+
+  for (const tpl of cands) {
+    try {
+      await open(page, fillTemplate(tpl, date));
+      const text = await pageText(page);
+      if (dateShown(text, date)) { q.setTemplate.run(tpl, row.id); return tpl; }
+    } catch { /* try next */ }
+  }
+
+  if (!aiEnabled()) return null;
+  // AI navigator: look at the live booking page and work out how dates are put in its URL.
+  try {
+    await open(page, bookingUrl);
+    const text = await pageText(page, 6000);
+    const links = (await pageLinks(page, 200)).map(l => `${l.text} -> ${l.href}`).join("\n").slice(0, 8000);
+    const j = await askJson(`This is a golf club's visitor tee time booking page: ${page.url()}
+Work out a URL template that opens the tee sheet for ANY date, using tokens {YYYY} {MM} {DD} (zero-padded) or {D} {M} (not padded) or {MON} (Jan, Feb...). Use the current URL and the links below (calendar day links often reveal the pattern). If dates can only be chosen by clicking with no URL change, return null.
+Reply only JSON: {"template": "https://..." | null, "why": "short"}
+CURRENT URL: ${page.url()}
+PAGE TEXT:
+${text}
+LINKS:
+${links}`, { maxTokens: 600 });
+    const tpl = typeof j.template === "string" && /^https?:\/\//.test(j.template) && /\{(YYYY|DD|D|MON)\}/.test(j.template) ? j.template : null;
+    if (tpl) {
+      await open(page, fillTemplate(tpl, date));
+      if (dateShown(await pageText(page), date)) { q.setTemplate.run(tpl, row.id); return tpl; }
+    }
+  } catch { /* give up */ }
+  return null;
+}
+
+const inflight = new Map();
+
+/**
+ * Live tee times for one course across several dates.
+ * Returns { course, fetchedAt, dates: { [date]: {status, times, note, url, cached} }, bookingUrl, message }
+ */
+export async function getTeeSheets(courseId, dates, players = 4) {
+  const row = q.byId.get(courseId);
+  if (!row) throw Object.assign(new Error("Course not found"), { status: 404 });
+  dates = [...new Set(dates)].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().slice(0, config.maxDatesPerRequest);
+  const course = rowToCourse(row);
+
+  if (!row.booking_url) {
+    return { course: course.id, dates: {}, bookingUrl: "", message: row.detected_at
+      ? "No online visitor booking found on the club's website. Phone or email the club."
+      : "This club hasn't been checked for online booking yet." };
+  }
+
+  const fresh = Date.now() - config.teeSheetCacheMinutes * 60000;
+  const result = {}, missing = [];
+  for (const d of dates) {
+    const c = q.getSheet.get(courseId, d, players);
+    if (c && c.fetched_at > fresh) result[d] = { ...JSON.parse(c.result), cached: true, fetchedAt: c.fetched_at };
+    else missing.push(d);
+  }
+  if (missing.length) {
+    const key = `${courseId}|${players}|${missing.join(",")}`;
+    if (!inflight.has(key)) {
+      inflight.set(key, withPage(async page => {
+        const out = {};
+        const tpl = await resolveTemplate(page, row, missing[0]);
+        for (const d of missing) {
+          let r;
+          if (!tpl) r = { status: "manual", times: [], note: "This booking system doesn't let us open a date directly. Use the booking page.", url: row.booking_url };
+          else {
+            try { r = await readSheet(page, course, fillTemplate(tpl, d), d, players); }
+            catch (e) { r = { status: "error", times: [], note: "The booking page didn't load", url: fillTemplate(tpl, d) }; }
+          }
+          const at = Date.now();
+          if (r.status !== "error") q.putSheet.run(courseId, d, players, at, JSON.stringify(r));
+          out[d] = { ...r, cached: false, fetchedAt: at };
+        }
+        return out;
+      }).finally(() => inflight.delete(key)));
+    }
+    Object.assign(result, await inflight.get(key));
+  }
+  return { course: course.id, dates: result, bookingUrl: row.booking_url, message: "" };
+}
+
+export function pruneCache() { q.pruneSheets.run(Date.now() - 24 * 3600 * 1000); }

@@ -1,0 +1,24 @@
+{
+  "name": "fairway-tour",
+  "version": "0.1.0",
+  "description": "Golf trip planner with live tee times from club booking systems (UK & Ireland).",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed:sample": "node scripts/seed-sample.js",
+    "import:osm": "node scripts/import-osm.js",
+    "detect:booking": "node scripts/detect-booking.js",
+    "check": "node scripts/check-course.js",
+    "enrich": "node scripts/enrich.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@fastify/static": "7.0.4",
+    "better-sqlite3": "11.3.0",
+    "fastify": "4.28.1",
+    "playwright": "1.47.2"
+  }
+}

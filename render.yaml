@@ -1,0 +1,26 @@
+# Render Blueprint: New > Blueprint, pick this repo.
+# The headless browser needs memory: use the Standard plan (2 GB) or above.
+services:
+  - type: web
+    name: fairway-tour
+    runtime: docker
+    plan: standard
+    region: frankfurt
+    healthCheckPath: /api/health
+    disk:
+      name: fairway-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /data
+      - key: CONTACT_EMAIL
+        sync: false
+      - key: PUBLIC_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true

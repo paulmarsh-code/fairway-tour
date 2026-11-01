@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fairway Tour Planner</title>
+<meta name="description" content="Plan a golf trip: find courses near you, see live tee times, build an itinerary and request bookings.">
+<meta name="theme-color" content="#1d5a39">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg width="26" height="30" viewBox="0 0 26 30" aria-hidden="true"><line x1="5" y1="2" x2="5" y2="28" stroke="currentColor" stroke-width="2"/><path d="M6 3 L22 8 L6 13 Z" fill="var(--flag)"/><ellipse cx="5" cy="28" rx="5" ry="1.6" fill="currentColor" opacity=".5"/></svg>
+      <h1>Fairway Tour Planner</h1>
+      <span class="sync" id="sync" style="margin-left:auto"></span>
+    </div>
+    <div class="strip" id="strip"></div>
+    <nav class="steps" aria-label="Trip steps">
+      <a href="#trip" data-tab="trip"><span>1</span>Trip</a>
+      <a href="#courses" data-tab="courses"><span>2</span>Courses</a>
+      <a href="#itinerary" data-tab="itinerary"><span>3</span>Itinerary</a>
+      <a href="#book" data-tab="book"><span>4</span>Book</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <!-- STEP 1 -->
+    <section data-view="trip">
+      <div>
+        <h2>Where are you heading?</h2>
+        <p class="lede">Set the area, travel dates and group, then tick the days you want to play. We search every club in the UK and Ireland inside your radius.</p>
+      </div>
+      <form class="panel" id="tripForm" novalidate>
+        <div class="field">
+          <label class="label" for="loc">Town, region or postcode</label>
+          <input id="loc" type="text" placeholder="e.g. Aberdeen, East Lothian, KY16" autocomplete="off">
+        </div>
+        <div class="grid2">
+          <div class="field"><label class="label" for="from">Arriving</label><input id="from" type="date"></div>
+          <div class="field"><label class="label" for="to">Leaving</label><input id="to" type="date"></div>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <span class="label" id="radLbl">Radius</span>
+            <div class="radius" role="group" aria-labelledby="radLbl" id="radius"></div>
+          </div>
+          <div class="field">
+            <span class="label" id="grpLbl">Group size</span>
+            <div class="stepper" role="group" aria-labelledby="grpLbl">
+              <button type="button" id="grpMinus" aria-label="Fewer golfers">−</button>
+              <output id="grp" aria-live="polite">4</output>
+              <button type="button" id="grpPlus" aria-label="More golfers">+</button>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn primary" type="submit" id="scanBtn">Find courses</button>
+          <span class="note" id="scanNote"></span>
+        </div>
+        <div class="status" id="scanStatus" hidden></div>
+      </form>
+
+      <div class="panel">
+        <div>
+          <h3>Which days do you want to play?</h3>
+          <p class="note">Tap the days you'll tee it up. Live tee times are checked for these days.</p>
+        </div>
+        <div class="days" id="dayPicker"></div>
+        <div class="row"><a class="btn primary" href="#courses">See courses</a></div>
+      </div>
+
+      <div class="panel" id="sharePanel" hidden>
+        <h3>Share this trip with your group</h3>
+        <p class="note">Anyone with this link can see and change the trip.</p>
+        <div class="share-link"><input id="shareUrl" readonly aria-label="Trip link"><button class="btn small" type="button" id="copyLink">Copy link</button><a class="btn small" id="waTrip" target="_blank" rel="noopener">WhatsApp</a></div>
+      </div>
+    </section>
+
+    <!-- STEP 2 -->
+    <section data-view="courses" hidden>
+      <div>
+        <h2 id="coursesTitle">Courses</h2>
+        <p class="lede" id="coursesLede"></p>
+      </div>
+      <div class="toolbar">
+        <div class="sort" role="group" aria-label="Sort courses" id="sort"></div>
+        <div class="legend"><span><i style="background:var(--good)"></i>Tee times free</span><span><i style="background:var(--warn)"></i>Check manually</span><span><i style="background:var(--bad)"></i>Nothing free</span></div>
+      </div>
+      <div class="courses" id="courseList"></div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section data-view="itinerary" hidden>
+      <div>
+        <h2>Your golf holiday</h2>
+        <p class="lede">Each playing day gets a course and a tee time. Build out holiday fills these from your picked courses using live availability.</p>
+      </div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between">
+          <h3>Playing days</h3>
+          <button class="btn small flag" type="button" id="rebuild">Build out holiday</button>
+        </div>
+        <div class="days" id="dayPicker2"></div>
+        <div class="rounds" id="rounds"></div>
+      </div>
+      <div class="panel">
+        <h3>Kit hire</h3>
+        <div class="grid2">
+          <div class="field"><span class="label">Buggies</span><div class="radius" id="buggyOpt"></div></div>
+          <div class="field"><span class="label">Trolleys</span><div class="radius" id="trolleyOpt"></div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Trip cost</h3>
+        <div class="totals" id="totals"></div>
+        <p class="note" id="costNote"></p>
+      </div>
+      <div class="panel">
+        <h3>Share and approve</h3>
+        <div class="preview" id="itinText"></div>
+        <div class="row">
+          <a class="btn" id="waLink" target="_blank" rel="noopener">Share on WhatsApp</a>
+          <a class="btn" id="mailShare">Email itinerary</a>
+          <button class="btn" type="button" id="copyItin">Copy text</button>
+        </div>
+        <div id="approveArea"></div>
+      </div>
+    </section>
+
+    <!-- STEP 4 -->
+    <section data-view="book" hidden>
+      <div>
+        <h2>Request tee times</h2>
+        <p class="lede">One email per club covering all your rounds there. Clubs with online booking also get a direct link to their booking page.</p>
+      </div>
+      <div id="bookArea"></div>
+    </section>
+
+    <footer class="foot">
+      <span>Course locations © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>. Weather by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</span>
+      <span>Tee times are read from each club's own booking page and can change at any moment. Always confirm with the club.</span>
+    </footer>
+  </div>
+</main>
+
+<div class="buildbar" id="buildbar" hidden>
+  <div class="wrap">
+    <span class="count" id="buildCount"></span>
+    <button class="btn flag" type="button" id="buildBtn">Build out holiday</button>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<textarea id="copyFallback" aria-hidden="true" tabindex="-1" style="position:fixed;left:-9999px;top:0;width:1px;height:1px"></textarea>
+<script src="/app.js" type="module"></script>
+</body>
+</html>
