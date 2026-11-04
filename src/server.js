@@ -13,7 +13,8 @@ import { aiEnabled } from "./ai.js";
 import { closeBrowser } from "./browser.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL || "info" }, bodyLimit: 128 * 1024, trustProxy: true });
+// Request logging is off by default so the logs stay readable; set LOG_REQUESTS=1 to turn it on.
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL || "info" }, disableRequestLogging: process.env.LOG_REQUESTS !== "1", bodyLimit: 128 * 1024, trustProxy: true });
 
 app.register(fastifyStatic, { root: path.join(here, "..", "public"), prefix: "/" });
 app.get("/t/:id", (req, reply) => reply.sendFile("index.html"));
