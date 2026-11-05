@@ -91,7 +91,17 @@ const course = id => S.courses[id] || null;
 const det = c => c?.details || {};
 const cur = c => det(c).currency || (c?.country === "IE" ? "€" : "£");
 const liveDay = (c, d) => S.live[c.id]?.dates?.[d] || null;
-function enrichedFee(c) { const f = (det(c).greenFees || []).map(x => num(x.price)).filter(x => x != null); return f.length ? Math.min(...f) : null; }
+/** The adult visitor rate for the trip's season, from the fees the club publishes. */
+function enrichedFee(c) {
+  const fees = (det(c).greenFees || []).map(x => ({ label: String(x.label || "").toLowerCase(), price: num(x.price) })).filter(x => x.price != null);
+  if (!fees.length) return null;
+  const adult = fees.filter(f => !/junior|juvenile|child|student|under|u\d\d|youth|twilight|evening|after \d|9[- ]hole|member|society|senior|concession|ladies/.test(f.label));
+  const m = parseD(T.from)?.getUTCMonth() ?? new Date().getMonth();
+  const winter = m >= 10 || m <= 2;
+  const season = adult.filter(f => winter ? /winter/.test(f.label) : /summer/.test(f.label));
+  const pick = season.length ? season : adult.filter(f => !/summer|winter/.test(f.label)).length ? adult.filter(f => !/summer|winter/.test(f.label)) : adult;
+  return pick.length ? Math.min(...pick.map(f => f.price)) : Math.max(...fees.map(f => f.price));
+}
 function liveMin(c, d) {
   const days = d ? [liveDay(c, d)] : Object.values(S.live[c.id]?.dates || {});
   const p = days.flatMap(x => (x?.times || []).map(t => num(t.price))).filter(x => x != null);

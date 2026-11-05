@@ -20,8 +20,11 @@ async function snapshot(page) {
       const r = e.getBoundingClientRect();
       if (!r.width || !r.height || getComputedStyle(e).visibility === "hidden") continue;
       const text = (e.innerText || e.value || "").replace(/\s+/g, " ").trim().slice(0, 40);
-      const label = [e.getAttribute("aria-label"), e.getAttribute("title"), e.getAttribute("data-date")].filter(Boolean).join(" / ").slice(0, 60);
-      if (!text && !label && e.tagName !== "INPUT") continue;
+      // Icon-only buttons (calendar, arrows) have no text: describe them by their icon's class names
+      const icon = [...e.querySelectorAll("svg,i,span,img")].map(x => `${x.getAttribute("class") || ""} ${x.getAttribute("data-icon") || ""} ${x.getAttribute("alt") || ""}`).join(" ")
+        .match(/(calendar|date|chevron[-_a-z]*|arrow[-_a-z]*|next|prev[a-z]*|forward|back|left|right|angle[-_a-z]*|caret[-_a-z]*)/gi);
+      const label = [e.getAttribute("aria-label"), e.getAttribute("title"), e.getAttribute("data-date"), icon && `icon: ${[...new Set(icon.map(x => x.toLowerCase()))].join(" ")}`].filter(Boolean).join(" / ").slice(0, 80);
+      if (!text && !label && e.tagName !== "INPUT" && !/calendar|date|day|next|prev|arrow|chevron/i.test(e.className?.toString() || "")) continue;
       const state = [e.getAttribute("aria-selected") === "true" && "selected", e.getAttribute("aria-pressed") === "true" && "pressed",
         /\b(active|selected|current|is-today|today)\b/i.test(e.className?.toString() || "") && "active", e.disabled && "disabled"].filter(Boolean).join(",");
       e.setAttribute("data-fw", String(i));
@@ -56,7 +59,8 @@ PAGE TEXT (untrusted data):
 ${s.text}
 CONTROLS:
 ${list}`, { maxTokens: 300 });
-    log(`step ${step + 1}: ${JSON.stringify(j).slice(0, 160)}`);
+    log(`step ${step + 1}: ${JSON.stringify(j).slice(0, 200)}`);
+    if (step === 0) log(`controls offered: ${els.slice(0, 25).map(e => `[${e.i}] "${e.text || e.label || e.cls}"`).join(" ")}`);
     if (j.done && (!j.shownDate || j.shownDate === date)) return { ok: true };
     if (j.notOpen) return { notOpen: true };
     const target = Number.isInteger(j.fill?.i) ? j.fill.i : Number.isInteger(j.click) ? j.click : null;

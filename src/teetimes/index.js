@@ -182,7 +182,8 @@ export async function getTeeSheets(courseId, dates, players = 4) {
           if (!tpl && aiEnabled()) {
             try {
               if (!opened) { await open(page, row.booking_url); opened = true; }
-              const nav = await goToDate(page, course.name, d);
+              const nav = await goToDate(page, course.name, d, m => console.log(`[nav] ${course.name} ${d} ${m}`));
+              console.log(`[nav] ${course.name} ${d} result: ${JSON.stringify(nav)}`);
               if (nav.ok) r = await readOpenPage(page, course, row.booking_url, d, players, true);
               else if (nav.notOpen) r = { status: "not_open", times: [], note: "Not open for online booking yet. Clubs open visitor tee times a set number of days ahead.", url: row.booking_url };
               else r = { status: "manual", times: [], note: "Couldn't find this date on the club's booking page. Use the booking page.", url: row.booking_url };
