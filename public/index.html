@@ -72,7 +72,8 @@
           <p class="note">Tap the days you'll tee it up. Live tee times are checked for these days.</p>
         </div>
         <div class="days" id="dayPicker"></div>
-        <div class="row"><a class="btn primary" href="#courses">See courses</a></div>
+        <div class="row"><button type="button" class="btn flag" id="suggestBtn">Plan it for me</button><a class="btn" href="#courses">Choose courses myself</a></div>
+        <p class="note">"Plan it for me" picks the highest-ranked courses in range that visitors can play and that have no reported problems like temporary greens, then builds your itinerary.</p>
       </div>
 
       <div class="panel" id="sharePanel" hidden>
@@ -88,9 +89,10 @@
         <h2 id="coursesTitle">Courses</h2>
         <p class="lede" id="coursesLede"></p>
       </div>
+      <div class="sort" role="group" aria-label="Which courses" id="view"></div>
       <div class="toolbar">
         <div class="sort" role="group" aria-label="Sort courses" id="sort"></div>
-        <div class="legend"><span><i style="background:var(--good)"></i>Tee times free</span><span><i style="background:var(--warn)"></i>Check manually</span><span><i style="background:var(--bad)"></i>Nothing free</span><span>– Not open for booking yet</span></div>
+        <div class="legend"><span>Tee times:</span><span><i style="background:var(--good)"></i>free</span><span><i style="background:var(--warn)"></i>Check manually</span><span><i style="background:var(--bad)"></i>Nothing free</span><span>– Not open for booking yet</span></div>
       </div>
       <div class="courses" id="courseList"></div>
     </section>
@@ -104,7 +106,7 @@
       <div class="panel">
         <div class="row" style="justify-content:space-between">
           <h3>Playing days</h3>
-          <button class="btn small flag" type="button" id="rebuild">Build out holiday</button>
+          <span class="row"><button class="btn small" type="button" id="suggestBtn2">Plan it for me</button><button class="btn small flag" type="button" id="rebuild">Build out holiday</button></span>
         </div>
         <div class="days" id="dayPicker2"></div>
         <div class="rounds" id="rounds"></div>
@@ -143,7 +145,7 @@
     </section>
 
     <footer class="foot">
-      <span>Course locations © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>. Weather by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</span>
+      <span>Course locations © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>. Rankings from the publications linked on each course. Scorecards and review scores from the UK Golf Course API where available. Weather by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.</span>
       <span>Tee times are read from each club's own booking page and can change at any moment. Always confirm with the club.</span>
     </footer>
   </div>

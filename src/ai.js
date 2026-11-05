@@ -33,6 +33,14 @@ export async function askJson(prompt, { maxTokens = 2000 } = {}) {
   }
 }
 
+/** Ask about a PDF or image (e.g. a club's scorecard). file = {data: Buffer, mediaType}. */
+export async function askJsonAboutFile(prompt, file, { maxTokens = 2000 } = {}) {
+  const block = file.mediaType === "application/pdf"
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: file.data.toString("base64") } }
+    : { type: "image", source: { type: "base64", media_type: file.mediaType, data: file.data.toString("base64") } };
+  return askOnce([block, { type: "text", text: prompt }], maxTokens);
+}
+
 async function askOnce(prompt, maxTokens) {
   if (!config.anthropicKey) throw new Error("ANTHROPIC_API_KEY not set");
   if (!aiEnabled()) throw new Error("Monthly AI budget reached");

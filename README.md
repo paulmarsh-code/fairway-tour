@@ -162,6 +162,37 @@ public/                  the app (no build step)
 scripts/                 OSM import, booking detection, single-club check, enrichment, sample seed
 ```
 
+## Top courses & hidden gems
+
+The app is aimed at golfers who want great courses, so its default view is a curated list of ranked courses and hidden gems. Each one carries its rankings, with links to the publications.
+
+- **The list** lives in `curated/scotland.json` and currently has 76 Scottish courses. Rankings come from:
+  - NCG Top 100s Scotland
+  - Golf Monthly Top 100 and Next 100
+  - Top 100 Golf Courses (GB&I)
+  - Golf Digest UK & Ireland
+  - GolfPass hidden gems
+
+  Edit the file, or add one per region, then run:
+  ```bash
+  docker compose exec app npm run curated
+  ```
+  This matches each entry to the directory and adds any club the map data lacks. It prints what it matched so you can check it.
+- **Scorecards and review scores** come from the [UK Golf Course Data API](https://www.ukgolfapi.uk/).
+  1. Subscribe to its free plan on RapidAPI. It allows 200 calls a month, and each club takes 2 calls.
+  2. Put the key in `UKGOLF_API_KEY`.
+  3. Run these:
+  ```bash
+  docker compose exec app npm run ukgolf -- probe "Royal Aberdeen"   # check the replies once (2 calls)
+  docker compose exec app npm run ukgolf -- curated                  # fetch every ranked club (2 calls each, ~13 s apart)
+  docker compose exec app npm run ukgolf -- usage
+  ```
+  Clubs the API doesn't cover fall back to the scorecard on the club's website, read from the PDF or image by Claude.
+- **Course conditions:**
+  - **From the club:** the club's course-status page is read when a course is opened, and every 6 hours for courses in trips starting within 3 weeks.
+  - **From golfers:** anyone can report what they found (temporary greens, mats, hollow-tining…) from a course's details. Reports from the last 3 weeks show as warnings on the card.
+- **Plan it for me** picks the highest-ranked courses in range for the ticked days. It skips clubs with limited visitor access and clubs with reported temporary greens or closures, then builds the itinerary.
+
 ## Not in version 1
 
 - **Course rankings:** there's no free source. Set them per club through the admin API (the sample seed includes a few). Sorting falls back to review score.

@@ -27,6 +27,13 @@ export const config = {
   usdToGbp: Number(process.env.USD_TO_GBP || 0.8),
   googlePlacesKey: process.env.GOOGLE_PLACES_API_KEY || "",
 
+  // UK Golf Course Data API (RapidAPI). Free plan: 200 calls/month, 5/minute.
+  ukgolfKey: process.env.UKGOLF_API_KEY || "",
+  ukgolfHost: process.env.UKGOLF_API_HOST || "uk-golf-course-data-api.p.rapidapi.com",
+  ukgolfBase: process.env.UKGOLF_API_BASE || "https://uk-golf-course-data-api.p.rapidapi.com",
+  ukgolfMonthlyLimit: int(process.env.UKGOLF_MONTHLY_LIMIT, 190),
+  ukgolfGapMs: int(process.env.UKGOLF_GAP_MS, 13000),
+
   // Admin endpoints (course edits) are disabled unless a token is set.
   adminToken: process.env.ADMIN_TOKEN || ""
 };

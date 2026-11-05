@@ -1,0 +1,773 @@
+{
+ "region": "Scotland",
+ "sources": {
+  "ncg": {
+   "label": "NCG Top 100s Scotland (2025)",
+   "url": "https://top100.nationalclubgolfer.com/rankinglists/scotland/"
+  },
+  "gm": {
+   "label": "Golf Monthly Top 100 UK & Ireland 2025/26",
+   "url": "https://www.golfmonthly.com/courses/top-100-golf-courses-60876/top-100-golf-courses-uk-and-ireland"
+  },
+  "gm101": {
+   "label": "Golf Monthly Next 100 UK & Ireland 2025/26",
+   "url": "https://www.golfmonthly.com/courses/top-100-courses/uk-irelands-next-100-golf-courses-61194"
+  },
+  "gp": {
+   "label": "GolfPass Golfers' Choice 2026: public courses & hidden gems in Scotland",
+   "url": "https://www.golfpass.com/travel-advisor/best-of/best-public-golf-courses-in-scotland-golfers-choice-2026"
+  },
+  "t100": {
+   "label": "Top 100 Golf Courses: Britain & Ireland",
+   "url": "https://www.top100golfcourses.com/golf-courses/britain-ireland"
+  },
+  "gd": {
+   "label": "Golf Digest UK & Ireland 2026",
+   "url": "https://www.golfdigest.com/story/united-kingdom-ireland-best-golf-courses"
+  }
+ },
+ "note": "Rank positions are as published by each source; the app shows them with a link to the source. Tier: 'top' = in the NCG Scotland top 30, Golf Monthly's UK&I Top 100 or Top 100 Golf Courses' GB&I Top 100; otherwise 'gem'. Access notes flag clubs where visitor play is limited.",
+ "courses": [
+  {
+   "name": "St Andrews Old Course",
+   "town": "St Andrews",
+   "match": [
+    "old"
+   ],
+   "ncg": 1,
+   "gm": 2,
+   "t100": 2
+  },
+  {
+   "name": "Trump Turnberry Ailsa",
+   "town": "Turnberry",
+   "match": [
+    "ailsa",
+    "turnberry"
+   ],
+   "ncg": 2,
+   "gm": 3,
+   "t100": 5
+  },
+  {
+   "name": "Muirfield",
+   "town": "Gullane",
+   "match": [
+    "muirfield",
+    "honourable company"
+   ],
+   "ncg": 3,
+   "gm": 4,
+   "access": "Visitor days limited (usually Tuesdays and Thursdays)",
+   "t100": 4
+  },
+  {
+   "name": "North Berwick",
+   "town": "North Berwick",
+   "match": [
+    "north berwick",
+    "west links"
+   ],
+   "ncg": 4,
+   "gm": 28,
+   "t100": 14
+  },
+  {
+   "name": "Royal Dornoch Championship",
+   "town": "Dornoch",
+   "match": [
+    "royal dornoch",
+    "championship"
+   ],
+   "ncg": 5,
+   "gm": 5,
+   "t100": 6
+  },
+  {
+   "name": "Carnoustie Championship",
+   "town": "Carnoustie",
+   "match": [
+    "championship",
+    "carnoustie"
+   ],
+   "ncg": 6,
+   "gm": 8,
+   "t100": 11
+  },
+  {
+   "name": "Kingsbarns Golf Links",
+   "town": "Kingsbarns",
+   "match": [
+    "kingsbarns"
+   ],
+   "ncg": 7,
+   "gm": 14,
+   "t100": 15
+  },
+  {
+   "name": "Cruden Bay",
+   "town": "Cruden Bay",
+   "match": [
+    "cruden bay"
+   ],
+   "ncg": 8,
+   "gm": 58,
+   "t100": 22
+  },
+  {
+   "name": "Trump International Scotland",
+   "town": "Balmedie",
+   "match": [
+    "trump"
+   ],
+   "ncg": 9,
+   "gm": 15,
+   "t100": 25
+  },
+  {
+   "name": "Trump International MacLeod Course (New)",
+   "town": "Balmedie",
+   "match": [
+    "macleod",
+    "new"
+   ],
+   "t100": 63
+  },
+  {
+   "name": "Cabot Highlands (Castle Stuart)",
+   "town": "Ardersier",
+   "match": [
+    "castle stuart",
+    "cabot"
+   ],
+   "ncg": 10,
+   "gm": 22,
+   "t100": 19,
+   "gd": 34
+  },
+  {
+   "name": "Loch Lomond",
+   "town": "Luss",
+   "match": [
+    "loch lomond"
+   ],
+   "ncg": 11,
+   "access": "Private members' club: guests of members only",
+   "t100": 45,
+   "gd": 26
+  },
+  {
+   "name": "Royal Troon Old",
+   "town": "Troon",
+   "match": [
+    "royal troon",
+    "old"
+   ],
+   "ncg": 12,
+   "gm": 20,
+   "t100": 36
+  },
+  {
+   "name": "Western Gailes",
+   "town": "Irvine",
+   "match": [
+    "western gailes"
+   ],
+   "ncg": 13,
+   "gm": 46,
+   "t100": 43,
+   "gd": 43
+  },
+  {
+   "name": "Skibo Castle",
+   "town": "Dornoch",
+   "match": [
+    "skibo",
+    "carnegie"
+   ],
+   "ncg": 14,
+   "access": "Private club: members and guests",
+   "t100": 66
+  },
+  {
+   "name": "Gleneagles King's",
+   "town": "Auchterarder",
+   "match": [
+    "king"
+   ],
+   "ncg": 15,
+   "gm": 36,
+   "t100": 46,
+   "gd": 47
+  },
+  {
+   "name": "Prestwick",
+   "town": "Prestwick",
+   "match": [
+    "prestwick"
+   ],
+   "ncg": 16,
+   "gm": 44,
+   "t100": 30,
+   "gd": 32
+  },
+  {
+   "name": "Royal Aberdeen (Balgownie)",
+   "town": "Aberdeen",
+   "match": [
+    "royal aberdeen",
+    "balgownie"
+   ],
+   "ncg": 17,
+   "gm": 17,
+   "t100": 28,
+   "gd": 42
+  },
+  {
+   "name": "Gullane No.1",
+   "town": "Gullane",
+   "match": [
+    "no.1",
+    "no 1",
+    "number 1",
+    "gullane"
+   ],
+   "ncg": 18,
+   "gm": 66,
+   "t100": 57
+  },
+  {
+   "name": "Dumbarnie Links",
+   "town": "Upper Largo",
+   "match": [
+    "dumbarnie"
+   ],
+   "ncg": 19,
+   "gm": 37,
+   "t100": 78
+  },
+  {
+   "name": "Cabot Highlands Old Petty",
+   "town": "Ardersier",
+   "match": [
+    "old petty",
+    "petty"
+   ],
+   "t100": 51
+  },
+  {
+   "name": "Nairn Championship",
+   "town": "Nairn",
+   "match": [
+    "nairn"
+   ],
+   "ncg": 20,
+   "gm": 38,
+   "t100": 48
+  },
+  {
+   "name": "The Machrie",
+   "town": "Port Ellen",
+   "match": [
+    "machrie"
+   ],
+   "ncg": 21,
+   "gm": 52,
+   "t100": 80
+  },
+  {
+   "name": "Ardfin",
+   "town": "Craighouse, Jura",
+   "match": [
+    "ardfin",
+    "jura"
+   ],
+   "ncg": 22,
+   "access": "Limited visitor access: check with the club",
+   "t100": 16
+  },
+  {
+   "name": "Machrihanish",
+   "town": "Machrihanish",
+   "match": [
+    "machrihanish"
+   ],
+   "exclude": [
+    "dunes"
+   ],
+   "ncg": 23,
+   "gm": 68,
+   "t100": 34
+  },
+  {
+   "name": "Elie (The Golf House Club)",
+   "town": "Elie",
+   "match": [
+    "golf house",
+    "elie"
+   ],
+   "ncg": 24,
+   "gm101": true,
+   "t100": 54
+  },
+  {
+   "name": "Gleneagles Queen's",
+   "town": "Auchterarder",
+   "match": [
+    "queen"
+   ],
+   "ncg": 25,
+   "gm": 56
+  },
+  {
+   "name": "Panmure",
+   "town": "Barry, Carnoustie",
+   "match": [
+    "panmure"
+   ],
+   "ncg": 26,
+   "gm101": true
+  },
+  {
+   "name": "St Andrews New Course",
+   "town": "St Andrews",
+   "match": [
+    "new"
+   ],
+   "ncg": 27,
+   "gm": 76,
+   "t100": 69
+  },
+  {
+   "name": "The Renaissance Club",
+   "town": "Dirleton",
+   "match": [
+    "renaissance"
+   ],
+   "ncg": 28,
+   "access": "Private club: members and guests",
+   "t100": 75
+  },
+  {
+   "name": "Dunbar",
+   "town": "Dunbar",
+   "match": [
+    "dunbar"
+   ],
+   "exclude": [
+    "winterfield"
+   ],
+   "ncg": 29,
+   "gm101": true
+  },
+  {
+   "name": "Dundonald Links",
+   "town": "Irvine",
+   "match": [
+    "dundonald"
+   ],
+   "ncg": 30,
+   "gm": 100,
+   "gp": 8
+  },
+  {
+   "name": "Murcar Links",
+   "town": "Aberdeen",
+   "match": [
+    "murcar"
+   ],
+   "ncg": 31,
+   "gm": 91
+  },
+  {
+   "name": "Luffness New",
+   "town": "Aberlady",
+   "match": [
+    "luffness"
+   ],
+   "ncg": 32,
+   "gm101": true
+  },
+  {
+   "name": "St Andrews Castle Course",
+   "town": "St Andrews",
+   "match": [
+    "castle"
+   ],
+   "ncg": 33,
+   "gm": 95
+  },
+  {
+   "name": "Southerness",
+   "town": "Southerness",
+   "match": [
+    "southerness"
+   ],
+   "ncg": 34,
+   "gm101": true
+  },
+  {
+   "name": "Moray Old",
+   "town": "Lossiemouth",
+   "match": [
+    "moray",
+    "old"
+   ],
+   "ncg": 35,
+   "gm101": true
+  },
+  {
+   "name": "Blairgowrie Rosemount",
+   "town": "Blairgowrie",
+   "match": [
+    "rosemount",
+    "blairgowrie"
+   ],
+   "ncg": 36,
+   "gm": 90
+  },
+  {
+   "name": "Machrihanish Dunes",
+   "town": "Machrihanish",
+   "match": [
+    "machrihanish dunes",
+    "dunes"
+   ],
+   "ncg": 37,
+   "gm101": true,
+   "gp": 13,
+   "t100": 83
+  },
+  {
+   "name": "Gullane No.2",
+   "town": "Gullane",
+   "match": [
+    "no.2",
+    "no 2",
+    "number 2"
+   ],
+   "ncg": 38,
+   "gm101": true,
+   "gp": 2
+  },
+  {
+   "name": "Boat of Garten",
+   "town": "Boat of Garten",
+   "match": [
+    "boat of garten"
+   ],
+   "ncg": 39,
+   "gm101": true
+  },
+  {
+   "name": "Brora",
+   "town": "Brora",
+   "match": [
+    "brora"
+   ],
+   "ncg": 40,
+   "gm101": true,
+   "t100": 59
+  },
+  {
+   "name": "Montrose 1562",
+   "town": "Montrose",
+   "match": [
+    "1562",
+    "medal",
+    "montrose"
+   ],
+   "exclude": [
+    "broomfield"
+   ],
+   "ncg": 41,
+   "gm101": true
+  },
+  {
+   "name": "Glasgow Gailes",
+   "town": "Irvine",
+   "match": [
+    "glasgow gailes",
+    "gailes"
+   ],
+   "exclude": [
+    "western"
+   ],
+   "ncg": 42
+  },
+  {
+   "name": "Ladybank",
+   "town": "Ladybank",
+   "match": [
+    "ladybank"
+   ],
+   "ncg": 43,
+   "gm101": true
+  },
+  {
+   "name": "Askernish",
+   "town": "South Uist",
+   "match": [
+    "askernish"
+   ],
+   "ncg": 44
+  },
+  {
+   "name": "Archerfield Fidra",
+   "town": "Dirleton",
+   "match": [
+    "fidra",
+    "archerfield"
+   ],
+   "ncg": 45,
+   "gm101": true,
+   "access": "Members and guests (and lodge residents)"
+  },
+  {
+   "name": "St Andrews Jubilee Course",
+   "town": "St Andrews",
+   "match": [
+    "jubilee"
+   ],
+   "ncg": 46,
+   "gm101": true
+  },
+  {
+   "name": "Fraserburgh Corbiehill",
+   "town": "Fraserburgh",
+   "match": [
+    "fraserburgh",
+    "corbiehill"
+   ],
+   "ncg": 47
+  },
+  {
+   "name": "Leven Links",
+   "town": "Leven",
+   "match": [
+    "leven"
+   ],
+   "ncg": 48
+  },
+  {
+   "name": "West Kilbride",
+   "town": "West Kilbride",
+   "match": [
+    "west kilbride"
+   ],
+   "ncg": 49,
+   "gp": 10
+  },
+  {
+   "name": "Fortrose & Rosemarkie",
+   "town": "Fortrose",
+   "match": [
+    "fortrose",
+    "rosemarkie"
+   ],
+   "ncg": 50,
+   "gp": 4
+  },
+  {
+   "name": "Lanark",
+   "town": "Lanark",
+   "match": [
+    "lanark"
+   ],
+   "ncg": 51
+  },
+  {
+   "name": "Lundin",
+   "town": "Lundin Links",
+   "match": [
+    "lundin"
+   ],
+   "ncg": 52,
+   "gm101": true
+  },
+  {
+   "name": "Spey Valley Championship",
+   "town": "Aviemore",
+   "match": [
+    "spey valley"
+   ],
+   "ncg": 53,
+   "gm101": true
+  },
+  {
+   "name": "Monifieth Medal",
+   "town": "Monifieth",
+   "match": [
+    "monifieth",
+    "medal"
+   ],
+   "ncg": 54,
+   "gm101": true
+  },
+  {
+   "name": "Kilspindie",
+   "town": "Aberlady",
+   "match": [
+    "kilspindie"
+   ],
+   "ncg": 55,
+   "gm101": true
+  },
+  {
+   "name": "Crail Balcomie",
+   "town": "Crail",
+   "match": [
+    "balcomie",
+    "crail"
+   ],
+   "gm101": true
+  },
+  {
+   "name": "Fairmont St Andrews Torrance",
+   "town": "St Andrews",
+   "match": [
+    "torrance",
+    "fairmont"
+   ],
+   "gm101": true,
+   "gp": 3
+  },
+  {
+   "name": "Gleneagles PGA Centenary",
+   "town": "Auchterarder",
+   "match": [
+    "pga",
+    "centenary"
+   ],
+   "gm101": true
+  },
+  {
+   "name": "Kilmarnock (Barassie)",
+   "town": "Barassie, Troon",
+   "match": [
+    "barassie",
+    "kilmarnock"
+   ],
+   "gm101": true
+  },
+  {
+   "name": "Schloss Roxburghe",
+   "town": "Kelso",
+   "match": [
+    "roxburghe"
+   ],
+   "gm101": true,
+   "gp": 17
+  },
+  {
+   "name": "Trump Turnberry King Robert the Bruce",
+   "town": "Turnberry",
+   "match": [
+    "robert the bruce",
+    "bruce",
+    "kintyre"
+   ],
+   "gm101": true,
+   "gp": 9,
+   "gd": 25
+  },
+  {
+   "name": "East Renfrewshire",
+   "town": "Newton Mearns",
+   "match": [
+    "east renfrewshire"
+   ],
+   "gp": 1
+  },
+  {
+   "name": "Grantown-on-Spey",
+   "town": "Grantown-on-Spey",
+   "match": [
+    "grantown"
+   ],
+   "gp": 5
+  },
+  {
+   "name": "Golspie",
+   "town": "Golspie",
+   "match": [
+    "golspie"
+   ],
+   "gp": 6
+  },
+  {
+   "name": "Peterhead Old",
+   "town": "Peterhead",
+   "match": [
+    "peterhead",
+    "craigewan",
+    "old"
+   ],
+   "gp": 7
+  },
+  {
+   "name": "Rowallan Castle",
+   "town": "Kilmaurs",
+   "match": [
+    "rowallan"
+   ],
+   "gp": 11
+  },
+  {
+   "name": "Inverurie",
+   "town": "Inverurie",
+   "match": [
+    "inverurie"
+   ],
+   "gp": 12
+  },
+  {
+   "name": "Aboyne",
+   "town": "Aboyne",
+   "match": [
+    "aboyne"
+   ],
+   "gp": 14
+  },
+  {
+   "name": "Royal Musselburgh",
+   "town": "Prestonpans",
+   "match": [
+    "royal musselburgh"
+   ],
+   "gp": 15
+  },
+  {
+   "name": "Drumpellier",
+   "town": "Coatbridge",
+   "match": [
+    "drumpellier"
+   ],
+   "gp": 16
+  },
+  {
+   "name": "Peebles",
+   "town": "Peebles",
+   "match": [
+    "peebles"
+   ],
+   "gp": 18
+  },
+  {
+   "name": "Kemnay",
+   "town": "Kemnay",
+   "match": [
+    "kemnay"
+   ],
+   "gp": 19
+  },
+  {
+   "name": "Kintore",
+   "town": "Kintore",
+   "match": [
+    "kintore"
+   ],
+   "gp": 20
+  }
+ ]
+}

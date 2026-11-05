@@ -2,7 +2,8 @@
 // and review scores from Google Places (needs GOOGLE_PLACES_API_KEY).
 import { config } from "./config.js";
 import { withPage, open, pageText, pageLinks, BLOCKED } from "./browser.js";
-import { askJson, aiEnabled } from "./ai.js";
+import { askJson, askJsonAboutFile, aiEnabled } from "./ai.js";
+import { userAgent } from "./config.js";
 import { q } from "./db.js";
 
 const USEFUL = /(visitor|green[\s-]*fee|rates|prices|scorecard|the course|course guide|hole|tee|catering|restaurant|clubhouse|menu|bar|practice|range|contact|buggy|hire|winter)/i;
@@ -41,7 +42,10 @@ export async function enrichCourse(row) {
     const homeText = await pageText(page, 7000);
     if (BLOCKED.test(homeText)) throw Object.assign(new Error("Website blocks automated reading"), { blocked: true });
     out.push({ url: home, text: homeText });
-    const links = (await pageLinks(page, 300)).filter(l => sameSite(l.href, home) && !/\.(pdf|jpe?g|png|zip|docx?)(\?|$)/i.test(l.href));
+    const all = await pageLinks(page, 300);
+    const card = all.find(l => /score\s*-?card|card of the course/i.test(`${l.text} ${l.href}`) && /\.(pdf|jpe?g|png|webp)(\?|$)/i.test(l.href));
+    if (card) out.scorecardUrl = card.href;
+    const links = all.filter(l => sameSite(l.href, home) && !/\.(pdf|jpe?g|png|zip|docx?)(\?|$)/i.test(l.href));
     let picks = await choosePages(row, links);
     if (!picks?.length) picks = links.filter(l => USEFUL.test(`${l.text} ${l.href}`)).map(l => l.href.split("#")[0]);
     // The visitor booking page often shows the course description and today's prices
@@ -52,7 +56,10 @@ export async function enrichCourse(row) {
       const key = href.split("#")[0];
       if (seen.has(key) && href === key) continue;
       seen.add(key);
-      try { await open(page, href); const t = await pageText(page, 7000); if (!BLOCKED.test(t)) out.push({ url: page.url(), text: t }); } catch {}
+      try {
+        await open(page, href); const t = await pageText(page, 7000); if (!BLOCKED.test(t)) out.push({ url: page.url(), text: t });
+        if (!out.scorecardUrl) { const c = (await pageLinks(page, 200)).find(l => /score\s*-?card|card of the course/i.test(`${l.text} ${l.href}`) && /\.(pdf|jpe?g|png|webp)(\?|$)/i.test(l.href)); if (c) out.scorecardUrl = c.href; }
+      } catch {}
     }
     return out;
   });
@@ -63,10 +70,32 @@ ${DETAILS_SCHEMA.replace('${"CONDITIONS"}', CONDITIONS)}
 ${pages.map(p => `\n=== ${p.url}\n${p.text}`).join("\n").slice(0, 45000)}`, { maxTokens: 4000 });
 
   const now = new Date().toISOString();
-  const details = { ...j, checkedAt: now, conditionsCheckedAt: now, pagesRead: pages.map(p => p.url) };
+  const prev = (() => { try { return JSON.parse(row.details || "{}"); } catch { return {}; } })();
+  let details = { ...j, checkedAt: now, conditionsCheckedAt: now, pagesRead: pages.map(p => p.url) };
+  // Keep scorecards from the UK Golf Course API: they're more complete than what websites state
+  if (prev.teesSource === "UK Golf Course API") details = { ...details, tees: prev.tees, teesSource: prev.teesSource, par: prev.par ?? details.par };
+  if (prev.ukgolf) details.ukgolf = prev.ukgolf;
+  // Otherwise try the club's own scorecard (PDF or image)
+  if (details.teesSource !== "UK Golf Course API" && pages.scorecardUrl) {
+    const sc = await readScorecardFile(row, pages.scorecardUrl).catch(() => null);
+    if (sc?.tees?.length) details = { ...details, tees: sc.tees, teesSource: "Club scorecard", scorecardUrl: pages.scorecardUrl, par: sc.par ?? details.par };
+  }
+  if (!details.teesSource && details.tees?.length) details.teesSource = "Club website";
   q.setDetails.run(JSON.stringify(details), row.id);
   if (j.bookingEmail && !row.email) q.setContact.run(String(j.bookingEmail), row.phone || String(j.bookingPhone || ""), row.id);
   return details;
+}
+
+/** Read tees, yardages, course rating and slope from a club's scorecard PDF or image. */
+export async function readScorecardFile(row, url) {
+  const r = await fetch(url, { headers: { "User-Agent": userAgent } });
+  if (!r.ok) return null;
+  const type = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  const mediaType = /pdf/.test(type) || /\.pdf(\?|$)/i.test(url) ? "application/pdf" : /png/.test(type) ? "image/png" : /webp/.test(type) ? "image/webp" : "image/jpeg";
+  const data = Buffer.from(await r.arrayBuffer());
+  if (data.length > 8 * 1024 * 1024) return null;
+  return askJsonAboutFile(`This is the scorecard of ${row.name}. Read every tee (colour/name) with its total yards, par, course rating and slope rating if printed (often in a table of "CR"/"SR" or "Course Rating"/"Slope"). Use null for anything not printed — never guess.
+Reply only JSON: {"par":number|null,"tees":[{"name":"","yards":number|null,"par":number|null,"rating":number|null,"slope":number|null}]}`, { data, mediaType }, { maxTokens: 1200 });
 }
 
 /** Re-read just the course status page (cheap), at most every 12 hours. */

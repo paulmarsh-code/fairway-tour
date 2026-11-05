@@ -54,6 +54,22 @@ CREATE TABLE IF NOT EXISTS trips (
 );
 `);
 
+// Columns and tables added after the first release (safe to run on every start)
+const cols = db.prepare("PRAGMA table_info(courses)").all().map(c => c.name);
+if (!cols.includes("curated")) db.exec("ALTER TABLE courses ADD COLUMN curated TEXT DEFAULT ''");
+db.exec(`
+CREATE TABLE IF NOT EXISTS reports (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id   TEXT NOT NULL,
+  played_on   TEXT NOT NULL,
+  flags       TEXT NOT NULL,   -- JSON: tempGreens, tempTees, mats, hollowTined, overseeded, buggiesBanned, wet, excellent
+  note        TEXT DEFAULT '',
+  created_at  TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS reports_course ON reports(course_id, played_on);
+CREATE TABLE IF NOT EXISTS api_usage (provider TEXT, month TEXT, calls INTEGER DEFAULT 0, PRIMARY KEY (provider, month));
+`);
+
 const parse = (s, d) => { try { return JSON.parse(s); } catch { return d; } };
 
 export function rowToCourse(r) {
@@ -63,7 +79,8 @@ export function rowToCourse(r) {
     website: r.website, phone: r.phone, email: r.email, holes: r.holes,
     bookingSystem: r.booking_system, bookingUrl: r.booking_url, hasDateTemplate: !!r.date_template,
     details: parse(r.details, {}), rating: r.rating, ratingCount: r.rating_count,
-    rankLabel: r.rank_label, rankScore: r.rank_score, enrichedAt: r.enriched_at
+    rankLabel: r.rank_label, rankScore: r.rank_score, enrichedAt: r.enriched_at,
+    curated: r.curated ? parse(r.curated, null) : null
   };
 }
 
@@ -90,6 +107,12 @@ export const q = {
   setHidden: db.prepare("UPDATE courses SET hidden=? WHERE id=?"),
   needDetection: db.prepare("SELECT * FROM courses WHERE hidden=0 AND website<>'' AND (detected_at IS NULL OR detected_at < datetime('now', ?)) ORDER BY detected_at IS NOT NULL, name LIMIT ?"),
 
+  setCurated: db.prepare("UPDATE courses SET curated=?, rank_label=?, rank_score=?, hidden=0, updated_at=datetime('now') WHERE id=?"),
+  clearCurated: db.prepare("UPDATE courses SET curated='', rank_label='', rank_score=NULL WHERE curated<>''"),
+  inBoxAll: db.prepare("SELECT * FROM courses WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?"),
+  curatedAll: db.prepare("SELECT * FROM courses WHERE curated<>''"),
+  addReport: db.prepare("INSERT INTO reports (course_id, played_on, flags, note) VALUES (?, ?, ?, ?)"),
+  recentReports: db.prepare("SELECT played_on, flags, note, created_at FROM reports WHERE course_id=? AND played_on >= date('now','-60 days') ORDER BY played_on DESC, id DESC LIMIT 8"),
   getSheet: db.prepare("SELECT * FROM tee_sheets WHERE course_id=? AND date=? AND players=?"),
   putSheet: db.prepare("INSERT OR REPLACE INTO tee_sheets (course_id, date, players, fetched_at, result) VALUES (?, ?, ?, ?, ?)"),
   pruneSheets: db.prepare("DELETE FROM tee_sheets WHERE fetched_at < ?"),

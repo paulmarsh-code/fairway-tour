@@ -3,7 +3,7 @@ import fastifyStatic from "@fastify/static";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
-import { q, rowToCourse, newId } from "./db.js";
+import { db, q, rowToCourse, newId } from "./db.js";
 import { geocode, milesBetween, boundingBox } from "./geo.js";
 import { forecast } from "./weather.js";
 import { getTeeSheets, pruneCache } from "./teetimes/index.js";
@@ -11,6 +11,7 @@ import { detectBooking } from "./detect.js";
 import { enrichCourse, fetchRating, refreshConditions } from "./enrich.js";
 import { aiEnabled, spendThisMonth } from "./ai.js";
 import { closeBrowser } from "./browser.js";
+import { ukgolfEnabled, callsThisMonth } from "./ukgolf.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Request logging is off by default so the logs stay readable; set LOG_REQUESTS=1 to turn it on.
@@ -41,7 +42,8 @@ app.setErrorHandler((err, req, reply) => {
 });
 
 // --- health -------------------------------------------------------------------
-app.get("/api/health", async () => ({ ok: true, ai: aiEnabled(), aiSpend: config.anthropicKey ? spendThisMonth() : null, reviews: !!config.googlePlacesKey }));
+app.get("/api/health", async () => ({ ok: true, ai: aiEnabled(), aiSpend: config.anthropicKey ? spendThisMonth() : null, reviews: !!config.googlePlacesKey,
+  scorecards: ukgolfEnabled() ? { calls: callsThisMonth(), limit: config.ukgolfMonthlyLimit } : null }));
 
 // --- course search --------------------------------------------------------------
 app.get("/api/search", async req => {
@@ -50,18 +52,36 @@ app.get("/api/search", async req => {
   const origin = await geocode(req.query.location);
   const box = boundingBox(origin, radius);
   const rows = q.inBox.all(box.minLat, box.maxLat, box.minLon, box.maxLon);
-  const courses = rows
+  const all = rows
     .map(r => ({ ...rowToCourse(r), miles: Math.round(milesBetween(origin, r) * 10) / 10 }))
     .filter(c => c.miles <= radius)
-    .sort((a, b) => a.miles - b.miles)
-    .slice(0, 80);
-  return { origin, radius, courses };
+    .sort((a, b) => (a.curated ? 0 : 1) - (b.curated ? 0 : 1) || a.miles - b.miles); // ranked clubs are never cut off
+  const curatedCount = all.filter(c => c.curated).length;
+  const courses = (req.query.only === "curated" ? all.filter(c => c.curated) : all).slice(0, 120);
+  return { origin, radius, courses, curatedCount, totalCount: all.length };
 });
 
+const reportsFor = id => q.recentReports.all(id).map(r => ({ playedOn: r.played_on, flags: JSON.parse(r.flags), note: r.note }));
 app.get("/api/courses/:id", async req => {
   const c = rowToCourse(q.byId.get(req.params.id));
   if (!c) throw fail(404, "Course not found");
-  return c;
+  return { ...c, reports: reportsFor(c.id) };
+});
+
+// Golfer condition reports ("we played it yesterday: temporary greens on 3 holes")
+const REPORT_FLAGS = ["tempGreens", "tempTees", "mats", "hollowTined", "overseeded", "buggiesBanned", "wet", "excellent"];
+app.get("/api/courses/:id/reports", async req => ({ reports: reportsFor(req.params.id) }));
+app.post("/api/courses/:id/reports", async req => {
+  limit(req, "reports", 6);
+  if (!q.byId.get(req.params.id)) throw fail(404, "Course not found");
+  const b = req.body || {};
+  const playedOn = /^\d{4}-\d{2}-\d{2}$/.test(b.playedOn || "") ? b.playedOn : new Date().toISOString().slice(0, 10);
+  if (playedOn > new Date().toISOString().slice(0, 10)) throw fail(400, "Pick the day you played (not a future date)");
+  const flags = Object.fromEntries(REPORT_FLAGS.map(k => [k, b.flags?.[k] === true]));
+  const note = String(b.note || "").replace(/\s+/g, " ").trim().slice(0, 280);
+  if (!Object.values(flags).some(Boolean) && !note) throw fail(400, "Tick at least one condition or add a note");
+  q.addReport.run(req.params.id, playedOn, JSON.stringify(flags), note);
+  return { reports: reportsFor(req.params.id) };
 });
 
 // --- live tee times --------------------------------------------------------------
@@ -158,6 +178,26 @@ app.patch("/api/admin/courses/:id", async req => {
   return rowToCourse(q.byId.get(row.id));
 });
 
+// Every 6 hours: refresh course conditions for courses in trips that start within 3 weeks.
+async function refreshTripConditions() {
+  if (!aiEnabled()) return;
+  const today = new Date().toISOString().slice(0, 10), horizon = new Date(Date.now() + 21 * 864e5).toISOString().slice(0, 10);
+  const ids = new Set();
+  for (const t of db.prepare("SELECT data FROM trips WHERE updated_at > datetime('now','-60 days')").all()) {
+    try {
+      const d = JSON.parse(t.data);
+      if (!d.to || d.to < today || d.from > horizon) continue;
+      for (const v of Object.values(d.playDays || {})) if (v?.courseId) ids.add(v.courseId);
+      for (const id of d.shortlist || []) ids.add(id);
+    } catch {}
+  }
+  for (const id of [...ids].slice(0, 40)) {
+    const row = q.byId.get(id);
+    if (row) await refreshConditions(row).catch(e => app.log.warn({ err: e.message, id }, "scheduled conditions failed"));
+  }
+}
+setInterval(() => refreshTripConditions().catch(() => {}), 6 * 3600 * 1000).unref();
+
 const stop = async () => { await app.close(); await closeBrowser(); process.exit(0); };
 process.on("SIGTERM", stop);
 process.on("SIGINT", stop);
@@ -165,7 +205,6 @@ process.on("SIGINT", stop);
 await app.listen({ port: config.port, host: config.host });
 
 // First boot on a fresh disk: build the course directory in the background.
-import { db } from "./db.js";
 import { spawn } from "node:child_process";
 if (db.prepare("SELECT COUNT(*) n FROM courses").get().n === 0 && process.env.AUTO_IMPORT !== "0") {
   app.log.info("Course directory is empty — importing UK & Ireland courses from Geofabrik's OpenStreetMap files in the background");

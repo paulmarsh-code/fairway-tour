@@ -30,7 +30,7 @@ const targetDates = () => { const p = playDates(); return (p.length ? p : tripDa
 /* ---------------- state ---------------- */
 const defaults = () => {
   const from = addDays(isoToday(), 14);
-  return { location: "", from, to: addDays(from, 3), radius: 25, group: 4, sort: "nearest",
+  return { location: "", from, to: addDays(from, 3), radius: 25, group: 4, sort: "rank", view: "curated",
     playDays: {}, shortlist: [], buggies: "none", trolleys: "none", approved: false,
     booker: { name: "", phone: "" }, emails: {}, sent: {}, confirmed: {} };
 };
@@ -119,10 +119,13 @@ async function search() {
   try {
     const r = await api(`/api/search?location=${encodeURIComponent(T.location)}&radius=${T.radius}`);
     S.origin = r.origin; S.results = r.courses.map(c => c.id); S.searched = true;
+    S.curatedCount = r.curatedCount || 0; S.totalCount = r.totalCount || r.courses.length;
     r.courses.forEach(c => (S.courses[c.id] = { ...S.courses[c.id], ...c }));
     // make sure picked courses outside the new radius are still loaded
     await Promise.all(T.shortlist.filter(id => !S.courses[id]).map(id => api(`/api/courses/${id}`).then(c => (S.courses[id] = c)).catch(() => {})));
-    st.textContent = `${r.courses.length} course${r.courses.length === 1 ? "" : "s"} within ${T.radius} miles of ${r.origin.label}.`;
+    st.textContent = S.curatedCount
+      ? `${S.curatedCount} top course${S.curatedCount === 1 ? "" : "s"} & hidden gems (of ${S.totalCount} courses) within ${T.radius} miles of ${r.origin.label}.`
+      : `${S.totalCount} courses within ${T.radius} miles of ${r.origin.label}. None of them are on our ranked list yet, so all are shown.`;
   } catch (e) { st.className = "status warn"; st.textContent = e.message; }
   renderAll();
 }
@@ -150,6 +153,7 @@ async function loadDetails(id) {
     catch (e) { S.courses[id] = { ...c, enrichError: e.message }; }
   }
   S.enriching[id] = "done";
+  try { const full = await api(`/api/courses/${id}`); S.courses[id] = { ...course(id), reports: full.reports, curated: full.curated }; } catch {}
   renderCourses();
   if (det(course(id)).statusUrl) {
     try { const r = await api(`/api/courses/${id}/conditions`, { method: "POST" }); S.courses[id] = { ...course(id), details: { ...det(course(id)), conditions: r.conditions, conditionsCheckedAt: r.checkedAt } }; } catch {}
@@ -185,10 +189,50 @@ function renderDayPicker(id) {
     : `<p class="note">Set your arriving and leaving dates first.</p>`;
 }
 
+/* ---------------- ranking, conditions ---------------- */
+const nameOf = c => c?.curated?.displayName || c?.name || "";
+const REPORT_LABELS = { tempGreens: "Temporary greens", tempTees: "Temporary tees", mats: "Fairway mats", hollowTined: "Greens hollow-tined", overseeded: "Recently overseeded", buggiesBanned: "No buggies", wet: "Wet / soft", excellent: "In great condition" };
+/** Things that could spoil a round, from the club's status page and recent golfer reports. */
+function condAlerts(c) {
+  const out = [], C = det(c).conditions;
+  if (C) {
+    if (C.status === "closed") out.push({ t: "Course closed", src: "club" });
+    else if (C.status === "restricted") out.push({ t: "Restrictions in place", src: "club" });
+    if (C.temporaryGreens) out.push({ t: "Temporary greens", src: "club" });
+    if (C.temporaryTees) out.push({ t: "Temporary tees", src: "club" });
+    if (C.mats) out.push({ t: "Fairway mats", src: "club" });
+    if (C.buggies && /not|restrict/i.test(C.buggies)) out.push({ t: `Buggies ${C.buggies}`, src: "club" });
+    if (C.maintenance) out.push({ t: C.maintenance, src: "club" });
+  }
+  const recent = (c.reports || []).filter(r => r.playedOn >= addDays(isoToday(), -21));
+  for (const k of Object.keys(REPORT_LABELS)) {
+    if (k === "excellent") continue;
+    const hits = recent.filter(r => r.flags?.[k]);
+    if (hits.length && !out.some(o => o.t === REPORT_LABELS[k])) out.push({ t: REPORT_LABELS[k], src: `golfers, ${hits[0].playedOn.slice(8)}/${hits[0].playedOn.slice(5, 7)}` });
+  }
+  return out;
+}
+function condSummary(c) {
+  const a = condAlerts(c);
+  if (a.length) return a.slice(0, 4).map(x => `<span class="pill warn" title="Source: ${esc(x.src)}">⚠ ${esc(x.t)}</span>`).join(" ");
+  const d = det(c), good = (c.reports || []).some(r => r.flags?.excellent && r.playedOn >= addDays(isoToday(), -21));
+  if (good) return `<span class="pill good">Golfers report it's in great condition</span>`;
+  if (d.conditions && d.conditionsCheckedAt) return `<span class="pill good">No restrictions on the club's status page</span>`;
+  return "";
+}
+function rankBadges(c, max = 1) {
+  const cu = c.curated;
+  if (!cu) return "";
+  const tier = cu.tier === "top" ? `<span class="pill good">Top course</span>` : `<span class="pill">Hidden gem</span>`;
+  const r = (cu.ranks || []).slice(0, max).map(x => `<a class="rank" href="${esc(x.url)}" target="_blank" rel="noopener" title="${esc(x.sourceLabel)}">★ ${esc(x.label)}${x.course ? ` · ${esc(x.course)}` : ""}</a>`).join(" ");
+  return `<div class="badges">${tier} ${r}${cu.access ? ` <span class="pill warn">${esc(cu.access)}</span>` : ""}</div>`;
+}
+
 /* ---------------- step 2 ---------------- */
-const SORTS = { nearest: "Nearest", rank: "Ranking", rating: "Best reviewed", price: "Cheapest" };
+const SORTS = { rank: "Ranking", nearest: "Nearest", rating: "Best reviewed", price: "Cheapest" };
 function sortedCourses() {
-  const list = S.results.map(course).filter(Boolean);
+  let list = S.results.map(course).filter(Boolean);
+  if (T.view === "curated" && list.some(c => c.curated)) list = list.filter(c => c.curated);
   const f = {
     nearest: (a, b) => (a.miles ?? 999) - (b.miles ?? 999),
     rank: (a, b) => (b.rankScore ?? -1) - (a.rankScore ?? -1) || (b.rating ?? 0) - (a.rating ?? 0),
@@ -201,8 +245,10 @@ function renderCourses() {
   const list = sortedCourses();
   $("coursesTitle").textContent = S.searched ? `${list.length} course${list.length === 1 ? "" : "s"} near ${S.origin?.label || T.location}` : "Courses";
   $("coursesLede").textContent = S.searched
-    ? "Tap Live tee times to read a club's own booking page for your playing days. Picked courses can be checked together from the itinerary."
+    ? "Ranked courses first, with their rankings, scorecards, current conditions and how to book. Add the ones you like, or let the app plan the trip for you."
     : "Enter a location on the Trip step to find courses.";
+  $("view").innerHTML = S.searched ? [["curated", `Top & hidden gems${S.curatedCount != null ? ` (${S.curatedCount})` : ""}`], ["all", `All courses${S.totalCount != null ? ` (${S.totalCount})` : ""}`]]
+    .map(([k, v]) => `<button type="button" class="chip-btn" data-view="${k}" aria-pressed="${(T.view || "curated") === k}">${v}</button>`).join("") : "";
   $("sort").innerHTML = Object.entries(SORTS).map(([k, v]) => `<button type="button" class="chip-btn" data-sort="${k}" aria-pressed="${T.sort === k}">${v}</button>`).join("");
   $("courseList").innerHTML = !S.searched ? `<div class="empty"><strong>No search yet.</strong><a class="btn primary" href="#trip">Choose a location</a></div>`
     : list.length ? list.map(courseCard).join("")
@@ -236,11 +282,11 @@ function courseCard(c) {
   return `<article class="course${inList ? " in" : ""}" data-id="${esc(c.id)}">
     <div class="c-head">
       <div style="min-width:0">
-        <h3>${esc(c.name)}</h3>
+        <h3>${esc(nameOf(c))}</h3>
         <div class="c-meta">${esc(c.town || "")}${c.miles != null ? ` · ${c.miles} mi` : ""}${d.type ? ` · ${esc(d.type)}` : ""}${c.holes ? ` · ${c.holes} holes` : ""}</div>
-        ${c.rankLabel ? `<span class="rank">★ ${esc(c.rankLabel)}</span>` : ""}
+        ${rankBadges(c)}
       </div>
-      <div class="score"><div class="big">${c.rating != null ? c.rating.toFixed(1) : "–"}</div><div class="sm">${c.ratingCount ? `${c.ratingCount} reviews` : "Reviews"}</div></div>
+      <div class="score"><div class="big">${c.rating != null ? c.rating.toFixed(1) : "–"}</div><div class="sm">${c.ratingCount ? `★ ${c.ratingCount} reviews` : "Google ★"}</div></div>
     </div>
     <div class="facts">
       <div><div class="v">${money(feeOf(c), cur(c))}</div><div class="k">${feeKind(c)}</div></div>
@@ -248,6 +294,7 @@ function courseCard(c) {
       <div><div class="v">${longest ? longest.toLocaleString("en-GB") : "–"}</div><div class="k">Yards (back)</div></div>
       <div><div class="v">${slopes.length ? Math.min(...slopes) + "–" + Math.max(...slopes) : "–"}</div><div class="k">Slope</div></div>
     </div>
+    ${condSummary(c) ? `<div class="avail" style="padding-bottom:0"><span class="label">Course conditions</span><div class="badges">${condSummary(c)}</div></div>` : ""}
     <div class="avail">
       <span class="label">Live tee times on your ${playDates().length ? "playing days" : "trip days"}</span>
       ${liveStrip(c)}
@@ -275,7 +322,10 @@ function details(c) {
   const C = d.conditions || null;
   const yn = v => (v === true ? "Yes" : v === false ? "No" : null);
   const condRows = C ? [["Course", C.status && C.status !== "unknown" ? C.status[0].toUpperCase() + C.status.slice(1) : null], ["Temporary greens", yn(C.temporaryGreens)], ["Temporary tees", yn(C.temporaryTees)], ["Fairway mats", yn(C.mats)], ["Buggies", C.buggies], ["Trolleys", C.trolleys], ["Maintenance", C.maintenance]].filter(([, v]) => v) : [];
+  const ranks = c.curated?.ranks || [];
+  const reports = c.reports || [];
   return `<div class="c-body">
+    ${ranks.length ? `<div><span class="label">Rankings</span><div class="price-list">${ranks.map(r => `<div><span><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.sourceLabel)}</a>${r.course ? ` · ${esc(r.course)}` : ""}</span><span>${esc(r.label)}</span></div>`).join("")}</div>${c.curated.access ? `<p class="note">${esc(c.curated.access)}</p>` : ""}</div>` : ""}
     <div><span class="label">Live tee times</span>
       ${L?.dates && Object.keys(L.dates).length ? `<div class="price-list">${Object.entries(L.dates).sort().map(([x, v]) => `<div><span>${esc(longDate(x))}</span><span>${v.times.length ? v.times.slice(0, 10).map(t => esc(t.time) + (t.price != null ? ` (${money(t.price, cc)})` : "")).join(", ") + (v.times.length > 10 ? ` +${v.times.length - 10}` : "") : esc(v.note || ({ none: "Nothing free", not_open: "Not open for booking yet", login: "Needs a login", manual: "Use the booking page" }[v.status] || "Check manually"))}</span></div>`).join("")}</div>`
         : `<p class="note">Tap Live tee times to read the club's booking page.</p>`}
@@ -285,12 +335,22 @@ function details(c) {
         : `<div class="wx">${wDays.map(([x, w]) => w ? `<div>${esc(longDate(x))}<b>${Math.round(w.high)}° / ${Math.round(w.low)}°</b>${esc(w.summary)}<br>Rain ${w.rainChance ?? "–"}% · Wind ${Math.round(w.windMph ?? 0)} mph<br>Sunset ${esc(w.sunset || "–")}</div>` : `<div>${esc(longDate(x))}<b>–</b>Not out yet</div>`).join("")}</div><p class="note">Forecasts reach about 16 days ahead${W.forecastUntil ? ` (currently to ${esc(longDate(W.forecastUntil))})` : ""}.</p>`}</div>
     <div><span class="label">Tees</span>
       ${tees.length ? `<div class="tbl-wrap"><table><thead><tr><th>Tee</th><th>Yards</th><th>Par</th><th>Rating</th><th>Slope</th></tr></thead><tbody>${tees.map(t => `<tr><td>${esc(t.name || "—")}</td><td>${num(t.yards)?.toLocaleString("en-GB") ?? "–"}</td><td>${num(t.par) ?? num(d.par) ?? "–"}</td><td>${num(t.rating) ?? "–"}</td><td>${num(t.slope) ?? "–"}</td></tr>`).join("")}</tbody></table></div>`
-        : enrichPending ? `<div class="loading-row"><span class="spin"></span> Reading the club's website…</div>` : `<p class="note">${esc(missing)}</p>`}</div>
+        : enrichPending ? `<div class="loading-row"><span class="spin"></span> Reading the club's website…</div>` : `<p class="note">${esc(missing)}</p>`}
+      ${tees.length && d.teesSource ? `<p class="note">Scorecard: ${esc(d.teesSource)}${d.ukgolf?.course ? ` (${esc(d.ukgolf.course)})` : ""}.</p>` : ""}
+      ${d.scorecardUrl ? `<a href="${esc(d.scorecardUrl)}" target="_blank" rel="noopener">Club scorecard ↗</a>` : ""}</div>
     <div><span class="label">Course conditions</span>
       ${condRows.length ? `<div class="price-list">${condRows.map(([k, v]) => `<div><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join("")}</div>` : `<p class="note">${esc(enrichPending ? missing : read ? (d.statusUrl ? "No current notice on the club's status page" : "The club doesn't publish a course status page we can read. Call the club for today's conditions.") : missing)}</p>`}
       ${C?.notes ? `<p class="note">${esc(C.notes)}</p>` : ""}
       ${C?.updated || d.conditionsCheckedAt ? `<p class="note">${C?.updated ? `Club update: ${esc(C.updated)}. ` : ""}${d.conditionsCheckedAt ? `Checked ${esc(new Date(d.conditionsCheckedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}.` : ""}</p>` : ""}
-      ${d.statusUrl ? `<a href="${esc(d.statusUrl)}" target="_blank" rel="noopener">Club's course status page ↗</a>` : ""}</div>
+      ${d.statusUrl ? `<a href="${esc(d.statusUrl)}" target="_blank" rel="noopener">Club's course status page ↗</a>` : ""}
+      <span class="label" style="margin-top:8px">Reported by golfers (last 60 days)</span>
+      ${reports.length ? `<div class="price-list">${reports.map(r => `<div><span>${esc(longDate(r.playedOn))}</span><span>${esc(Object.keys(REPORT_LABELS).filter(k => r.flags?.[k]).map(k => REPORT_LABELS[k]).join(", ") || "—")}${r.note ? ` · “${esc(r.note)}”` : ""}</span></div>`).join("")}</div>` : `<p class="note">No reports yet.</p>`}
+      <details class="report"><summary>Played it recently? Report conditions</summary>
+        <div class="field"><label class="label" for="rp-date-${esc(c.id)}">Day you played</label><input id="rp-date-${esc(c.id)}" type="date" max="${isoToday()}" value="${isoToday()}"></div>
+        <div class="checks">${Object.entries(REPORT_LABELS).map(([k, v]) => `<label><input type="checkbox" data-rflag="${k}" data-rcourse="${esc(c.id)}"> ${esc(v)}</label>`).join("")}</div>
+        <div class="field"><label class="label" for="rp-note-${esc(c.id)}">Anything else (optional)</label><input id="rp-note-${esc(c.id)}" type="text" maxlength="280" placeholder="e.g. 4 temporary greens on the back nine"></div>
+        <button type="button" class="btn small primary" data-report="${esc(c.id)}">Send report</button>
+      </details></div>
     <div><span class="label">Green fees & offers</span>
       ${fees.length ? `<div class="price-list">${fees.map(f => `<div><span>${esc(f.label)}</span><span>${money(num(f.price), cc)}</span></div>`).join("")}</div>` : `<p class="note">${esc(read && !enrichPending ? "Not published by the club. Tap Live tee times for current prices." : missing)}</p>`}
       ${(d.offers || []).filter(Boolean).length ? `<ul class="plain">${d.offers.filter(Boolean).map(o => `<li>${esc(o)}</li>`).join("")}</ul>` : ""}
@@ -319,14 +379,32 @@ function renderBuildbar() {
   $("buildBtn").disabled = n === 0;
 }
 
+/* ---------------- plan it for me ---------------- */
+/** Pick the best-ranked courses in range with open visitor access and no reported problems, then build the trip. */
+async function suggestTrip() {
+  const days = playDates();
+  if (!S.searched) { toast("Search for a location first"); location.hash = "#trip"; return; }
+  if (!days.length) { toast("Tick the days you want to play first"); location.hash = "#trip"; return; }
+  const ranked = S.results.map(course).filter(c => c?.curated);
+  if (!ranked.length) { toast("No ranked courses in range: widen the radius, or pick courses yourself"); location.hash = "#courses"; return; }
+  const open = ranked.filter(c => !/private|members|guests|limited/i.test(c.curated.access || ""));
+  const clean = (open.length ? open : ranked).filter(c => !condAlerts(c).some(a => /closed|temporary greens/i.test(a.t)));
+  const pool = (clean.length >= Math.min(days.length, 2) ? clean : open.length ? open : ranked)
+    .sort((a, b) => (b.rankScore ?? 0) - (a.rankScore ?? 0));
+  T.shortlist = pool.slice(0, days.length).map(c => c.id);
+  save();
+  await buildHoliday({ skipLive: true });
+  toast(`Planned ${days.length} round${days.length > 1 ? "s" : ""} at ${T.shortlist.length} top-ranked course${T.shortlist.length > 1 ? "s" : ""}. Swap any you like.`);
+}
+
 /* ---------------- build holiday ---------------- */
-async function buildHoliday() {
+async function buildHoliday({ skipLive = false } = {}) {
   const days = playDates();
   if (!T.shortlist.length) { toast("Add at least one course first"); location.hash = "#courses"; return; }
   if (!days.length) { toast("Pick your playing days first"); location.hash = "#itinerary"; return; }
   location.hash = "#itinerary";
   const missing = T.shortlist.filter(id => !S.live[id]);
-  if (missing.length) { toast(`Checking live tee times at ${missing.length} club${missing.length > 1 ? "s" : ""}…`); await Promise.all(missing.map(loadLive)); }
+  if (missing.length && !skipLive) { toast(`Checking live tee times at ${missing.length} club${missing.length > 1 ? "s" : ""}…`); await Promise.all(missing.map(loadLive)); }
   const used = {};
   for (const d of days) {
     const ranked = T.shortlist.map(course).filter(Boolean).map((c, i) => {
@@ -369,13 +447,14 @@ function renderItinerary() {
     let info = "";
     if (c) {
       const pill = !x ? `<span class="pill">Not checked</span>` : free.length ? (free.includes(r.time) ? `<span class="pill good">${esc(r.time)} is free</span>` : `<span class="pill warn">${esc(r.time)} isn't free</span>`) : `<span class="pill bad">Nothing free</span>`;
-      info = `<div class="info">${pill}<span>${money(feeOf(c, d), cur(c))} pp</span>${free.length ? `<span>Free: ${free.slice(0, 6).map(esc).join(", ")}${free.length > 6 ? "…" : ""}</span>` : ""}</div>`;
+      const alerts = condAlerts(c);
+      info = `<div class="info">${pill}${alerts.slice(0, 2).map(a => `<span class="pill warn">⚠ ${esc(a.t)}</span>`).join("")}${c.curated?.ranks?.[0] ? `<span>★ ${esc(c.curated.ranks[0].label)}</span>` : ""}<span>${money(feeOf(c, d), cur(c))} pp</span>${free.length ? `<span>Free: ${free.slice(0, 6).map(esc).join(", ")}${free.length > 6 ? "…" : ""}</span>` : ""}</div>`;
     }
     return `<div class="round">
       <div class="date"><div class="dw">${p.dw}</div><div class="dn">${p.dn}</div><div class="dm">${p.dm}</div></div>
       <div class="fields">
         <div class="field"><label class="label" for="c-${d}">Course</label>
-          <select id="c-${d}" data-course="${d}"><option value="">Choose a course</option>${options.map(o => `<option value="${esc(o.id)}"${o.id === r.courseId ? " selected" : ""}>${esc(o.name)}</option>`).join("")}</select></div>
+          <select id="c-${d}" data-course="${d}"><option value="">Choose a course</option>${options.map(o => `<option value="${esc(o.id)}"${o.id === r.courseId ? " selected" : ""}>${esc(nameOf(o))}</option>`).join("")}</select></div>
         <div class="field"><label class="label" for="t-${d}">Tee time</label>
           <select id="t-${d}" data-time="${d}">${timeOpts.map(t => `<option value="${t}"${t === r.time ? " selected" : ""}>${t}${free.includes(t) ? " ✓ free" : ""}</option>`).join("")}</select></div>
       </div>${info}
@@ -408,7 +487,7 @@ function itinText() {
   const days = playDates();
   if (!days.length) lines.push("No rounds planned yet.");
   days.forEach(d => { const r = T.playDays[d], c = course(r.courseId), f = c ? feeOf(c, d) : null;
-    lines.push(`${longDate(d)} – ${r.time} – ${c ? `${c.name}${c.town ? " (" + c.town + ")" : ""}` : "course TBC"}${f != null ? ` – ${money(f, cur(c))} pp` : ""}`); });
+    lines.push(`${longDate(d)} – ${r.time} – ${c ? `${nameOf(c)}${c.town ? " (" + c.town + ")" : ""}` : "course TBC"}${f != null ? ` – ${money(f, cur(c))} pp` : ""}`); });
   const k = costs();
   if (k.rounds) lines.push("", `Hire: ${T.buggies === "share" ? "buggies (1 per 2)" : "walking"}${T.trolleys !== "none" ? `, ${T.trolleys} trolleys` : ""}`, `Cost: ${money(k.totalPP)} per golfer · ${money(k.totalPP * T.group)} for the group`);
   if (S.tripId) lines.push("", `Trip: ${location.origin}/t/${S.tripId}`);
@@ -427,8 +506,8 @@ function emailFor(c, rounds) {
   const hire = [];
   if (T.buggies === "share") hire.push(`${Math.ceil(T.group / 2)} buggies`);
   if (T.trolleys !== "none") hire.push(`${T.group} ${T.trolleys} trolleys`);
-  const body = [`Dear ${c.name} Bookings Team,`, "",
-    `We are a group of ${T.group} golfers visiting the ${T.location} area from ${rangeLabel()}, and we would love to play ${c.name}.`, "",
+  const body = [`Dear ${nameOf(c)} Bookings Team,`, "",
+    `We are a group of ${T.group} golfers visiting the ${T.location} area from ${rangeLabel()}, and we would love to play ${nameOf(c)}.`, "",
     "Could you please confirm availability for:", ...rounds.map(r => `• ${longDate(r.date)} – tee time ${r.time} (or the nearest available)`), "",
     hire.length ? `We would also like to hire ${hire.join(" and ")} if available.` : "We will be walking with our own equipment.",
     "Please confirm the green fee per player, any current offers or group rates, and clubhouse food options.", "",
@@ -448,7 +527,7 @@ function renderBook() {
       const c = course(id); if (!c) return "";
       const m = emailFor(c, g[id]), to = toOf(c);
       return `<div class="panel mail">
-        <div class="row" style="justify-content:space-between"><h3>${esc(c.name)}</h3>${T.sent[id] ? `<span class="pill good">Requested</span>` : `<span class="pill warn">Not sent</span>`}</div>
+        <div class="row" style="justify-content:space-between"><h3>${esc(nameOf(c))}</h3>${T.sent[id] ? `<span class="pill good">Requested</span>` : `<span class="pill warn">Not sent</span>`}</div>
         ${c.bookingUrl && c.bookingSystem !== "email" ? `<a class="btn flag" href="${esc(c.bookingUrl)}" target="_blank" rel="noopener">Book online on the club's booking page ↗</a>` : ""}
         ${c.bookingSystem === "email" ? `<p class="note">This club takes visitor bookings by email.${c.bookingUrl ? ` <a href="${esc(c.bookingUrl)}" target="_blank" rel="noopener">Club's booking information ↗</a>` : ""}</p>` : ""}
         <div class="field"><label class="label" for="to-${esc(id)}">Club booking email</label>
@@ -471,6 +550,17 @@ function updateMails() {
   }
 }
 
+async function sendReport(id) {
+  const flags = {};
+  document.querySelectorAll(`[data-rcourse="${CSS.escape(id)}"]`).forEach(b => { if (b.checked) flags[b.dataset.rflag] = true; });
+  const playedOn = $(`rp-date-${id}`)?.value, note = $(`rp-note-${id}`)?.value || "";
+  try {
+    const r = await api(`/api/courses/${id}/reports`, { method: "POST", body: { playedOn, flags, note } });
+    S.courses[id] = { ...course(id), reports: r.reports };
+    toast("Thanks, your report is up"); renderAll();
+  } catch (e) { toast(e.message); }
+}
+
 /* ---------------- routing + render ---------------- */
 const TABS = ["trip", "courses", "itinerary", "book"];
 const currentTab = () => { const h = location.hash.slice(1); return TABS.includes(h) ? h : "trip"; };
@@ -490,6 +580,9 @@ document.addEventListener("click", e => {
   if (ds.r) { T.radius = +ds.r; save(); renderAll(); if (S.searched) search(); }
   else if (ds.day) toggleDay(ds.day);
   else if (ds.sort) { T.sort = ds.sort; save(); renderCourses(); }
+  else if (ds.view) { T.view = ds.view; save(); renderCourses(); }
+  else if (ds.report) sendReport(ds.report);
+  else if (t.id === "suggestBtn" || t.id === "suggestBtn2") suggestTrip();
   else if (ds.add) { T.shortlist = T.shortlist.includes(ds.add) ? T.shortlist.filter(x => x !== ds.add) : [...T.shortlist, ds.add]; save(); renderAll(); }
   else if (ds.live) loadLive(ds.live);
   else if (ds.open) { S.open[ds.open] = !S.open[ds.open]; renderCourses(); if (S.open[ds.open]) loadDetails(ds.open); }
