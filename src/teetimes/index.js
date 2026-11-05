@@ -152,6 +152,9 @@ export async function getTeeSheets(courseId, dates, players = 4) {
   dates = [...new Set(dates)].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().slice(0, config.maxDatesPerRequest);
   const course = rowToCourse(row);
 
+  if (row.booking_system === "blocked") {
+    return { course: course.id, dates: {}, bookingUrl: row.booking_url, message: "This club's website blocks automated checks, so live tee times can't be read. Use the club's booking page." };
+  }
   if (row.booking_system === "email") {
     return { course: course.id, dates: {}, bookingUrl: row.booking_url, bookingEmail: row.email,
       message: `This club takes visitor bookings by email${row.email ? ` (${row.email})` : ""}, not online. Add it to your trip and use the Book step to send a request.` };
@@ -181,10 +184,12 @@ export async function getTeeSheets(courseId, dates, players = 4) {
           let r;
           if (!tpl && aiEnabled()) {
             try {
-              if (!opened) { await open(page, row.booking_url); opened = true; }
+              const start = row.booking_system === "brs" ? systemById("brs").visitorUrl(row.booking_url) : row.booking_url;
+              if (!opened) { await open(page, start); opened = true; }
               const nav = await goToDate(page, course.name, d, m => console.log(`[nav] ${course.name} ${d} ${m}`));
               console.log(`[nav] ${course.name} ${d} result: ${JSON.stringify(nav)}`);
               if (nav.ok) r = await readOpenPage(page, course, row.booking_url, d, players, true);
+              else if (nav.blocked) r = { status: "blocked", times: [], note: "This club's website blocks automated checks. Use the booking page.", url: row.booking_url };
               else if (nav.notOpen) r = { status: "not_open", times: [], note: "Not open for online booking yet. Clubs open visitor tee times a set number of days ahead.", url: row.booking_url };
               else r = { status: "manual", times: [], note: "Couldn't find this date on the club's booking page. Use the booking page.", url: row.booking_url };
             } catch (e) { if (process.env.DEBUG_NAV) console.error(e); r = { status: "error", times: [], note: "The booking page didn't load", url: row.booking_url }; opened = false; }

@@ -1,7 +1,7 @@
 // Optional course details from the club's own website (needs ANTHROPIC_API_KEY),
 // and review scores from Google Places (needs GOOGLE_PLACES_API_KEY).
 import { config } from "./config.js";
-import { withPage, open, pageText, pageLinks } from "./browser.js";
+import { withPage, open, pageText, pageLinks, BLOCKED } from "./browser.js";
 import { askJson, aiEnabled } from "./ai.js";
 import { q } from "./db.js";
 
@@ -38,7 +38,9 @@ export async function enrichCourse(row) {
     const out = [];
     await open(page, row.website);
     const home = page.url();
-    out.push({ url: home, text: await pageText(page, 7000) });
+    const homeText = await pageText(page, 7000);
+    if (BLOCKED.test(homeText)) throw Object.assign(new Error("Website blocks automated reading"), { blocked: true });
+    out.push({ url: home, text: homeText });
     const links = (await pageLinks(page, 300)).filter(l => sameSite(l.href, home) && !/\.(pdf|jpe?g|png|zip|docx?)(\?|$)/i.test(l.href));
     let picks = await choosePages(row, links);
     if (!picks?.length) picks = links.filter(l => USEFUL.test(`${l.text} ${l.href}`)).map(l => l.href.split("#")[0]);
@@ -50,7 +52,7 @@ export async function enrichCourse(row) {
       const key = href.split("#")[0];
       if (seen.has(key) && href === key) continue;
       seen.add(key);
-      try { await open(page, href); out.push({ url: page.url(), text: await pageText(page, 7000) }); } catch {}
+      try { await open(page, href); const t = await pageText(page, 7000); if (!BLOCKED.test(t)) out.push({ url: page.url(), text: t }); } catch {}
     }
     return out;
   });

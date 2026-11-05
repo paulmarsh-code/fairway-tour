@@ -93,7 +93,7 @@ app.post("/api/courses/:id/enrich", async req => {
   if (stale) {
     if (!aiEnabled()) enrichError = config.anthropicKey ? "Course details are paused until next month (AI budget reached)." : "Course details aren't switched on for this site.";
     else if (!row.website) enrichError = "We don't have this club's website yet.";
-    else await enrichCourse(row).catch(e => { req.log.warn({ err: e.message }, "enrich failed"); enrichError = "Couldn't read the club's website just now. Try again later."; });
+    else await enrichCourse(row).catch(e => { req.log.warn({ err: e.message }, "enrich failed"); enrichError = e.blocked ? "This club's website blocks automated reading. Check the club website for details." : "Couldn't read the club's website just now. Try again later."; });
     await fetchRating(row).catch(() => null);
   }
   return { ...rowToCourse(q.byId.get(row.id)), enrichError };

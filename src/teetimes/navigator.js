@@ -5,6 +5,7 @@
 // Safety: read-only. Elements that could book, pay, log in or submit are never offered to
 // Claude and are refused if picked. Page text is passed as untrusted data.
 import { askJson } from "../ai.js";
+import { BLOCKED } from "../browser.js";
 
 const FORBIDDEN = /\b(book(ing)?|pay|payment|checkout|basket|cart|confirm|reserve|purchase|buy|login|log in|sign in|sign up|register|submit|continue|proceed|add to)\b|\b\d\s*players?\s*[-–:]/i;
 const MAX_STEPS = 6;
@@ -46,6 +47,7 @@ export async function goToDate(page, courseName, date, log = () => {}) {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" });
   for (let step = 0; step < MAX_STEPS; step++) {
     const s = await snapshot(page);
+    if (step === 0 && BLOCKED.test(s.text) && s.els.length < 8) return { blocked: true };
     const els = s.els.filter(e => !FORBIDDEN.test(`${e.text} ${e.label}`));
     const list = els.map(e => `[${e.i}] ${e.tag}${e.type ? ":" + e.type : ""} "${e.text}"${e.label ? ` (${e.label})` : ""}${e.state ? ` {${e.state}}` : ""}${e.cls ? ` .${e.cls}` : ""}`).join("\n");
     const j = await askJson(`You are operating a golf club's visitor tee-time page (${courseName}) in a browser, read-only.

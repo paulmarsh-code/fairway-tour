@@ -7,7 +7,7 @@ const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const TIMES = []; for (let h = 7; h <= 15; h++) for (const m of ["00", "30"]) TIMES.push(String(h).padStart(2, "0") + ":" + m);
 const RADII = [10, 25, 50, 75];
-const SYSTEM_LABEL = { email: "email", brs: "BRS Golf", intelligentgolf: "IntelligentGolf", chronogolf: "Chronogolf", clubv1: "Club V1", golfnow: "GolfNow", howdidido: "HowDidiDo", golfmanager: "Golfmanager", other: "club website" };
+const SYSTEM_LABEL = { email: "email", blocked: "club website", brs: "BRS Golf", intelligentgolf: "IntelligentGolf", chronogolf: "Chronogolf", clubv1: "Club V1", golfnow: "GolfNow", howdidido: "HowDidiDo", golfmanager: "Golfmanager", other: "club website" };
 
 /* ---------------- dates ---------------- */
 const isoToday = () => new Date().toISOString().slice(0, 10);
@@ -222,7 +222,7 @@ function liveStrip(c) {
     const n = x.times.length;
     const cls = x.status === "available" ? "open" : x.status === "none" ? "members" : "limited";
     const mark = x.status === "not_open" ? "–" : null;
-    const tip = n ? `${n} free: ${x.times.slice(0, 8).map(t => t.time).join(", ")}` : ({ none: "Nothing free", not_open: "Not open for online booking yet", login: "Booking system needs a login", manual: "Open the booking page", wrong_date: "Couldn't open this date", unverified_date: "Couldn't confirm the date shown" }[x.status] || x.note || "Check manually");
+    const tip = n ? `${n} free: ${x.times.slice(0, 8).map(t => t.time).join(", ")}` : ({ none: "Nothing free", not_open: "Not open for online booking yet", blocked: "Website blocks automated checks", login: "Booking system needs a login", manual: "Open the booking page", wrong_date: "Couldn't open this date", unverified_date: "Couldn't confirm the date shown" }[x.status] || x.note || "Check manually");
     return `<span class="ad ${cls}${plays.has(d) ? " play" : ""}" title="${esc(longDate(d))}: ${esc(tip)}">${p.dw.slice(0, 2)}<br>${p.dn}<br><b>${n || mark || (cls === "members" ? "0" : "?")}</b></span>`;
   }).join("")}</div>`;
 }
@@ -231,7 +231,7 @@ function courseCard(c) {
   const tees = Array.isArray(d.tees) ? d.tees : [];
   const longest = tees.reduce((m, t) => Math.max(m, num(t.yards) || 0), 0), slopes = tees.map(t => num(t.slope)).filter(Boolean);
   const L = S.live[c.id];
-  const sys = c.bookingSystem === "email" ? `Visitor bookings by email${c.email ? `: ${c.email}` : ""}`
+  const sys = c.bookingSystem === "blocked" ? "This club's website blocks automated checks" : c.bookingSystem === "email" ? `Visitor bookings by email${c.email ? `: ${c.email}` : ""}`
     : c.bookingUrl ? `Online booking: ${SYSTEM_LABEL[c.bookingSystem] || "club website"}` : c.bookingSystem === "none" ? "No online booking found" : "";
   return `<article class="course${inList ? " in" : ""}" data-id="${esc(c.id)}">
     <div class="c-head">

@@ -2,9 +2,9 @@
 // by visiting the club's own website. Looks at links, iframes, the page HTML (booking
 // widgets often hide their address in scripts or data attributes) and the network requests
 // the page makes while loading. Also picks up a contact email if one is linked.
-import { withPage, open, pageLinks } from "./browser.js";
+import { withPage, open, pageLinks, pageText, BLOCKED } from "./browser.js";
 import { q } from "./db.js";
-import { detectSystem } from "./teetimes/systems.js";
+import { detectSystem, systemById } from "./teetimes/systems.js";
 
 const sameSite = (a, b) => { try { return new URL(a).hostname.replace(/^www\./, "") === new URL(b).hostname.replace(/^www\./, ""); } catch { return false; } };
 const URLS_IN_HTML = /https?:\/\/[^\s"'<>\\)]+/g;
@@ -42,20 +42,32 @@ async function evidence(page, requests) {
   return { links, all: [...links, ...htmlUrls, ...reqs] };
 }
 
+const squash = s => String(s || "").toLowerCase().replace(/golf|club|course|links|the|&|and|ltd|[^a-z0-9]/g, "");
+/** How well a booking URL's club slug matches the club's name (Sport Aberdeen-style sites link several clubs). */
+function nameMatch(href, name) {
+  const slug = squash((/brsgolf\.com\/([^/#?]+)/.exec(href) || /\/club\/([^/#?]+)/.exec(href) || [])[1]);
+  const n = squash(name);
+  if (!slug || !n) return 0;
+  return slug === n ? 3 : slug.includes(n) || n.includes(slug) ? 2 : 0;
+}
+
 /** Pick the best booking URL for a detected system from what we saw. */
-function pickSystem(items) {
-  let found = null;
+function pickSystem(items, clubName = "") {
+  let best = null, bestScore = -1, seenSystem = null;
   for (const l of items) {
     const s = detectSystem(l.href);
     if (!s) continue;
-    // Prefer a URL that identifies the club (e.g. chronogolf.com/club/<slug>, visitors.brsgolf.com/<club>)
-    const good = s.id === "chronogolf" ? /\/club\/[^/?#]+/.test(l.href)
-      : s.id === "brs" ? /brsgolf\.com\/[a-z0-9_-]+/i.test(l.href) && !/\.(js|css)(\?|$)/.test(l.href)
-      : !/\.(js|css|png|svg|woff2?)(\?|$)/.test(l.href);
-    if (good) return { system: s.id, url: l.href.replace(/[),.;]+$/, "") };
-    found ||= { system: s.id, url: "" };
+    seenSystem ||= s.id;
+    const h = l.href.replace(/[),.;]+$/, "");
+    if (/\.(js|css|png|svg|woff2?)(\?|$)/.test(h)) continue;
+    if (/\/(login|signin|sign-in|register|account)\b/i.test(h) || /members\.brsgolf\.com/i.test(h)) continue; // members' areas, not visitor booking
+    let score = 1;
+    if (s.id === "chronogolf" && /\/club\/[^/?#]+/.test(h)) score += 2;
+    if (s.id === "brs" && /visitors\.brsgolf\.com\/[a-z0-9_-]+/i.test(h)) score += 2;
+    score += nameMatch(h, clubName) * 2;
+    if (score > bestScore) { best = { system: s.id, url: h }; bestScore = score; }
   }
-  return found;
+  return best || (seenSystem ? { system: seenSystem, url: "" } : null);
 }
 
 export async function detectBooking(row) {
@@ -68,6 +80,10 @@ export async function detectBooking(row) {
     try { await open(page, website); website = page.url(); }
     catch { q.setBooking.run("unreachable", "", "", row.id); return { system: "unreachable", url: "" }; }
 
+    if (BLOCKED.test(await pageText(page, 3000))) {
+      q.setBooking.run("blocked", website, website, row.id);
+      return { system: "blocked", url: website };
+    }
     let ev = await evidence(page, requests);
     const emails = new Map(), phones = [];
     const collect = (links, at) => {
@@ -80,7 +96,7 @@ export async function detectBooking(row) {
       }
     };
     collect(ev.links, page.url());
-    let hit = pickSystem(ev.all);
+    let hit = pickSystem(ev.all, row.name);
     let onSiteBooking = "";
 
     // Follow up to five on-site visitor / tee time / green fee pages, best first
@@ -98,7 +114,7 @@ export async function detectBooking(row) {
         try { await open(page, href); } catch { continue; }
         ev = await evidence(page, requests);
         collect(ev.links, page.url());
-        const h = pickSystem(ev.all);
+        const h = pickSystem(ev.all, row.name);
         if (h?.url) { hit = h; break; }
         hit ||= h;
         if (!onSiteBooking && /tee-?times?|visitorbooking|book(ing)?/i.test(page.url()) && sameSite(page.url(), website)) onSiteBooking = page.url();
@@ -107,7 +123,7 @@ export async function detectBooking(row) {
 
     const best = [...emails.values()].filter(e => e.score > 0).sort((a, b) => b.score - a.score)[0];
     let result;
-    if (hit?.url) result = hit;
+    if (hit?.url) result = hit.system === "brs" ? { ...hit, url: systemById("brs").visitorUrl(hit.url) } : hit;
     else if (hit) result = { system: hit.system, url: onSiteBooking || website }; // system seen, but no club-specific address
     else if (best && best.score >= 3) result = { system: "email", url: best.at }; // books by email, no online tee sheet
     else if (onSiteBooking) result = { system: "other", url: onSiteBooking };

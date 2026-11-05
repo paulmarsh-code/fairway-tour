@@ -63,6 +63,9 @@ export async function dismissCookieBanners(page) {
   }
 }
 
+/** Bot-protection screens (Cloudflare and similar). Sites that show these don't want automated visits. */
+export const BLOCKED = /(verify(ing)? (that )?you are (a )?human|checking (if the site connection is secure|your browser)|just a moment\.\.\.|attention required|cloudflare ray id|performance & security by cloudflare|are you a robot|access denied|request blocked)/i;
+
 export async function pageText(page, max = 15000) {
   const t = await page.evaluate(() => document.body?.innerText || "").catch(() => "");
   return t.replace(/\n{3,}/g, "\n\n").slice(0, max);

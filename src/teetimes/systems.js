@@ -10,6 +10,10 @@ export const SYSTEMS = [
   {
     id: "brs", label: "BRS Golf",
     match: /(^|\.)brsgolf\.com/i,
+    visitorUrl(url) {
+      const slug = new URL(url).pathname.split("/").filter(Boolean)[0];
+      return slug ? `https://visitors.brsgolf.com/${slug}#/course/1` : url;
+    },
     candidates(url) {
       const u = new URL(url);
       const slug = u.pathname.split("/").filter(Boolean)[0];

@@ -16,6 +16,7 @@
     "check": "node scripts/check-course.js",
     "inspect": "node scripts/inspect-site.js",
     "reset": "node scripts/reset.js",
+    "set-booking": "node scripts/set-booking.js",
     "enrich": "node scripts/enrich.js",
     "test": "node --test"
   },
