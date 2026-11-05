@@ -122,6 +122,10 @@ export async function getTeeSheets(courseId, dates, players = 4) {
   dates = [...new Set(dates)].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().slice(0, config.maxDatesPerRequest);
   const course = rowToCourse(row);
 
+  if (row.booking_system === "email") {
+    return { course: course.id, dates: {}, bookingUrl: row.booking_url, bookingEmail: row.email,
+      message: `This club takes visitor bookings by email${row.email ? ` (${row.email})` : ""}, not online. Add it to your trip and use the Book step to send a request.` };
+  }
   if (!row.booking_url) {
     return { course: course.id, dates: {}, bookingUrl: "", message: row.detected_at
       ? "No online visitor booking found on the club's website. Phone or email the club."

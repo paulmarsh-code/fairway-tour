@@ -7,7 +7,7 @@ const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const TIMES = []; for (let h = 7; h <= 15; h++) for (const m of ["00", "30"]) TIMES.push(String(h).padStart(2, "0") + ":" + m);
 const RADII = [10, 25, 50, 75];
-const SYSTEM_LABEL = { brs: "BRS Golf", intelligentgolf: "IntelligentGolf", chronogolf: "Chronogolf", clubv1: "Club V1", golfnow: "GolfNow", howdidido: "HowDidiDo", golfmanager: "Golfmanager", other: "club website" };
+const SYSTEM_LABEL = { email: "email", brs: "BRS Golf", intelligentgolf: "IntelligentGolf", chronogolf: "Chronogolf", clubv1: "Club V1", golfnow: "GolfNow", howdidido: "HowDidiDo", golfmanager: "Golfmanager", other: "club website" };
 
 /* ---------------- dates ---------------- */
 const isoToday = () => new Date().toISOString().slice(0, 10);
@@ -125,6 +125,7 @@ async function loadLive(id) {
   S.live[id] = { ...(S.live[id] || {}), loading: true, error: "" }; renderCourses();
   try {
     if (!c.bookingUrl && !c.bookingSystem) { const u = await api(`/api/courses/${id}/detect`, { method: "POST" }); S.courses[id] = { ...c, ...u }; }
+    else if (!S.courses[id].detectedFresh) { try { S.courses[id] = { ...S.courses[id], ...(await api(`/api/courses/${id}`)), detectedFresh: true }; } catch {} }
     const r = await api(`/api/courses/${id}/teetimes?dates=${dates.join(",")}&players=${Math.min(T.group, 4)}`);
     S.live[id] = { ...r, loading: false, at: Date.now() };
   } catch (e) { S.live[id] = { loading: false, error: e.message, dates: {} }; }
@@ -212,7 +213,8 @@ function courseCard(c) {
   const tees = Array.isArray(d.tees) ? d.tees : [];
   const longest = tees.reduce((m, t) => Math.max(m, num(t.yards) || 0), 0), slopes = tees.map(t => num(t.slope)).filter(Boolean);
   const L = S.live[c.id];
-  const sys = c.bookingUrl ? `Online booking: ${SYSTEM_LABEL[c.bookingSystem] || "club website"}` : c.bookingSystem === "none" ? "No online booking found" : "";
+  const sys = c.bookingSystem === "email" ? `Visitor bookings by email${c.email ? `: ${c.email}` : ""}`
+    : c.bookingUrl ? `Online booking: ${SYSTEM_LABEL[c.bookingSystem] || "club website"}` : c.bookingSystem === "none" ? "No online booking found" : "";
   return `<article class="course${inList ? " in" : ""}" data-id="${esc(c.id)}">
     <div class="c-head">
       <div style="min-width:0">
@@ -235,7 +237,7 @@ function courseCard(c) {
     </div>
     <div class="c-actions">
       <button type="button" class="btn ${inList ? "" : "primary"}" data-add="${esc(c.id)}">${inList ? "✓ In your trip" : "Add to trip"}</button>
-      <button type="button" class="btn" data-live="${esc(c.id)}"${L?.loading ? " disabled" : ""}>${L && !L.error ? "Refresh tee times" : "Live tee times"}</button>
+      <button type="button" class="btn" data-live="${esc(c.id)}"${L?.loading ? " disabled" : ""}>${c.bookingSystem === "email" ? "How to book" : L && !L.error ? "Refresh tee times" : "Live tee times"}</button>
       <button type="button" class="btn" data-open="${esc(c.id)}" aria-expanded="${open}">${open ? "Hide details" : "Details"}</button>
     </div>
     ${open ? details(c) : ""}
@@ -418,7 +420,8 @@ function renderBook() {
       const m = emailFor(c, g[id]), to = toOf(c);
       return `<div class="panel mail">
         <div class="row" style="justify-content:space-between"><h3>${esc(c.name)}</h3>${T.sent[id] ? `<span class="pill good">Requested</span>` : `<span class="pill warn">Not sent</span>`}</div>
-        ${c.bookingUrl ? `<a class="btn flag" href="${esc(c.bookingUrl)}" target="_blank" rel="noopener">Book online on the club's booking page ↗</a>` : ""}
+        ${c.bookingUrl && c.bookingSystem !== "email" ? `<a class="btn flag" href="${esc(c.bookingUrl)}" target="_blank" rel="noopener">Book online on the club's booking page ↗</a>` : ""}
+        ${c.bookingSystem === "email" ? `<p class="note">This club takes visitor bookings by email.${c.bookingUrl ? ` <a href="${esc(c.bookingUrl)}" target="_blank" rel="noopener">Club's booking information ↗</a>` : ""}</p>` : ""}
         <div class="field"><label class="label" for="to-${esc(id)}">Club booking email</label>
           <input id="to-${esc(id)}" type="email" data-email="${esc(id)}" placeholder="Find it on the club's website" value="${esc(to)}"></div>
         <div class="field"><span class="label">Subject</span><div class="mail-addr">${esc(m.subj)}</div></div>

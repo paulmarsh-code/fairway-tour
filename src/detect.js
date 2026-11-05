@@ -9,6 +9,17 @@ import { detectSystem } from "./teetimes/systems.js";
 const sameSite = (a, b) => { try { return new URL(a).hostname.replace(/^www\./, "") === new URL(b).hostname.replace(/^www\./, ""); } catch { return false; } };
 const URLS_IN_HTML = /https?:\/\/[^\s"'<>\\)]+/g;
 
+/** Rank contact emails: a bookings/visitors address beats a general one. Returns -1 for ones to ignore. */
+export function emailScore(addr) {
+  const a = String(addr).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)) return -1;
+  if (/(membership|members|accounts?|finance|hr|jobs|careers|weddings?|events?|functions?|marketing|press|media|captain|junior|ladies|greens?keep)/.test(a.split("@")[0])) return 0;
+  if (/(booking|visitor|tee|starter|reservations?)/.test(a)) return 5;
+  if (/(proshop|pro-shop|pro\.?shop|golfshop|shop|\bpro\b)/.test(a)) return 4;
+  if (/(office|reception|admin|secretary|manager|enquir|info|hello|golf)/.test(a)) return 3;
+  return 1;
+}
+
 /** Score a candidate link: higher = more likely to lead to visitor booking. */
 function linkScore(l) {
   const s = `${l.text} ${l.href}`.toLowerCase();
@@ -58,7 +69,17 @@ export async function detectBooking(row) {
     catch { q.setBooking.run("unreachable", "", "", row.id); return { system: "unreachable", url: "" }; }
 
     let ev = await evidence(page, requests);
-    const email = ev.links.map(l => l.href).find(h => h.startsWith("mailto:"))?.slice(7).split("?")[0] || "";
+    const emails = new Map(), phones = [];
+    const collect = (links, at) => {
+      for (const l of links) {
+        if (l.href.startsWith("mailto:")) {
+          const addr = decodeURIComponent(l.href.slice(7).split("?")[0]).trim().toLowerCase();
+          const sc = emailScore(addr) + (/book|visitor|tee|green-?fee/i.test(at) ? 1 : 0);
+          if (sc > (emails.get(addr)?.score ?? -1)) emails.set(addr, { addr, score: sc, at });
+        } else if (l.href.startsWith("tel:")) phones.push(decodeURIComponent(l.href.slice(4)).trim());
+      }
+    };
+    collect(ev.links, page.url());
     let hit = pickSystem(ev.all);
     let onSiteBooking = "";
 
@@ -76,6 +97,7 @@ export async function detectBooking(row) {
         visited.add(href);
         try { await open(page, href); } catch { continue; }
         ev = await evidence(page, requests);
+        collect(ev.links, page.url());
         const h = pickSystem(ev.all);
         if (h?.url) { hit = h; break; }
         hit ||= h;
@@ -83,14 +105,17 @@ export async function detectBooking(row) {
       }
     }
 
+    const best = [...emails.values()].filter(e => e.score > 0).sort((a, b) => b.score - a.score)[0];
     let result;
     if (hit?.url) result = hit;
     else if (hit) result = { system: hit.system, url: onSiteBooking || website }; // system seen, but no club-specific address
+    else if (best && best.score >= 3) result = { system: "email", url: best.at }; // books by email, no online tee sheet
     else if (onSiteBooking) result = { system: "other", url: onSiteBooking };
     else result = { system: "none", url: "" };
 
     q.setBooking.run(result.system, result.url, website, row.id);
-    if (email && !row.email) { try { q.upsertCourse.run({ ...row, email, hidden: row.hidden }); } catch {} }
+    if (best) { result.email = best.addr; q.setContact.run(best.addr, row.phone || phones[0] || "", row.id); }
+    else if (phones[0] && !row.phone) q.setContact.run(row.email || "", phones[0], row.id);
     return result;
   });
 }

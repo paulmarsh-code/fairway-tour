@@ -81,6 +81,7 @@ export const q = {
       email=CASE WHEN courses.email='' THEN excluded.email ELSE courses.email END,
       holes=COALESCE(excluded.holes, courses.holes), updated_at=datetime('now')`),
   setBooking: db.prepare("UPDATE courses SET booking_system=?, booking_url=?, website=COALESCE(NULLIF(?, ''), website), detected_at=datetime('now'), updated_at=datetime('now') WHERE id=?"),
+  setContact: db.prepare("UPDATE courses SET email=?, phone=?, updated_at=datetime('now') WHERE id=?"),
   setTemplate: db.prepare("UPDATE courses SET date_template=?, updated_at=datetime('now') WHERE id=?"),
   setDetails: db.prepare("UPDATE courses SET details=?, enriched_at=datetime('now'), updated_at=datetime('now') WHERE id=?"),
   setRating: db.prepare("UPDATE courses SET rating=?, rating_count=?, updated_at=datetime('now') WHERE id=?"),

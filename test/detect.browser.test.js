@@ -16,7 +16,9 @@ const page = f => fs.readFileSync(new URL(`./fixtures/${f}`, import.meta.url));
 let mode = "brs";
 const server = http.createServer((req, res) => {
   res.setHeader("content-type", "text/html");
-  if (req.url.startsWith("/visitors")) return res.end(mode === "brs" ? page("club-visitors.html") : "<h1>Visitors</h1><p>Email us to book.</p>");
+  if (req.url.startsWith("/visitors")) return res.end(mode === "brs" ? page("club-visitors.html")
+    : mode === "email" ? '<h1>Visitors</h1><p>Contact <a href="mailto:membership@testlinks.co.uk">membership</a> or book with <a href="mailto:bookings@testlinks.co.uk">bookings@testlinks.co.uk</a>, <a href="tel:+441779812285">01779 812285</a></p>'
+    : "<h1>Visitors</h1><p>Email us to book.</p>");
   if (req.url.startsWith("/golf/tee-times")) return res.end(mode === "chrono" ? page("club-teetimes.html") : "<h1>Tee times</h1>");
   res.end(page("club-home.html"));
 }).listen(0);
@@ -44,4 +46,14 @@ test("falls back to the club's own tee-times page when no system is found", { ti
   const r = await detectBooking(club("t3"));
   assert.equal(r.system, "other");
   assert.match(r.url, /\/golf\/tee-times/);
+});
+
+test("recognises a club that takes visitor bookings by email", { timeout: 90000 }, async () => {
+  mode = "email";
+  const r = await detectBooking(club("t4"));
+  assert.equal(r.system, "email");
+  assert.equal(r.email, "bookings@testlinks.co.uk");
+  const row = q.byId.get("t4");
+  assert.equal(row.email, "bookings@testlinks.co.uk");
+  assert.equal(row.phone, "+441779812285");
 });
