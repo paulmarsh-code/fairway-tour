@@ -7,6 +7,9 @@ ENV NODE_ENV=production \
     DATA_DIR=/data \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
+# osmium filters golf courses out of the Geofabrik map files (npm run import:geofabrik)
+RUN apt-get update && apt-get install -y --no-install-recommends osmium-tool && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund
 

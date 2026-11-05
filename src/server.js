@@ -156,7 +156,7 @@ await app.listen({ port: config.port, host: config.host });
 import { db } from "./db.js";
 import { spawn } from "node:child_process";
 if (db.prepare("SELECT COUNT(*) n FROM courses").get().n === 0 && process.env.AUTO_IMPORT !== "0") {
-  app.log.info("Course directory is empty — importing UK & Ireland courses from OpenStreetMap in the background");
-  const child = spawn(process.execPath, [path.join(here, "..", "scripts", "import-osm.js")], { stdio: "inherit", env: process.env });
+  app.log.info("Course directory is empty — importing UK & Ireland courses from Geofabrik's OpenStreetMap files in the background");
+  const child = spawn(process.execPath, [path.join(here, "..", "scripts", "import-geofabrik.js")], { stdio: "inherit", env: process.env });
   child.on("exit", code => app.log.info(`Course import finished (exit ${code})`));
 }

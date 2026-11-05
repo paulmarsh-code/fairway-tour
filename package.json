@@ -10,6 +10,7 @@
     "dev": "node --watch src/server.js",
     "seed:sample": "node scripts/seed-sample.js",
     "import:osm": "node scripts/import-osm.js",
+    "import:geofabrik": "node scripts/import-geofabrik.js",
     "detect:booking": "node scripts/detect-booking.js",
     "check": "node scripts/check-course.js",
     "enrich": "node scripts/enrich.js",

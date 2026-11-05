@@ -11,10 +11,10 @@
 import { db, q } from "../src/db.js";
 import { userAgent } from "../src/config.js";
 import { pathToFileURL } from "node:url";
+import { saveElements } from "./osm-common.js";
 
 const countries = process.argv.slice(2).filter(c => /^(GB|IE)$/i.test(c)).map(c => c.toUpperCase());
 const list = countries.length ? countries : ["GB", "IE"];
-const NOT_A_COURSE = /\b(pitch\s*(and|&|n)\s*putt|mini(ature)?\s*golf|crazy\s*golf|adventure\s*golf|foot\s*golf|disc\s*golf|driving\s*range|putting\s*green|golf\s*centre\s*range)\b/i;
 
 // Bounding boxes [south, west, north, east] and tile size in degrees
 const BOUNDS = { GB: [49.8, -8.7, 60.9, 1.8], IE: [51.3, -10.7, 55.5, -5.9] };
@@ -74,29 +74,7 @@ const quarter = ([s, w, n, e]) => {
   return [[s, w, ms, mw], [s, mw, ms, e], [ms, w, n, mw], [ms, mw, n, e]];
 };
 
-const clean = s => String(s || "").trim();
-const site = s => { s = clean(s); if (!s) return ""; if (!/^https?:\/\//i.test(s)) s = "https://" + s; try { return new URL(s).href; } catch { return ""; } };
-
-const save = db.transaction((country, items) => {
-  let added = 0, hidden = 0;
-  for (const e of items) {
-    const t = e.tags || {};
-    const name = clean(t.name || t["name:en"]);
-    const lat = e.lat ?? e.center?.lat, lon = e.lon ?? e.center?.lon;
-    if (!name || lat == null || lon == null) continue;
-    const holes = Number.parseInt(t["golf:holes"] || t.holes || "", 10);
-    const hide = NOT_A_COURSE.test(name) || (Number.isFinite(holes) && holes < 9) || t.disused === "yes" || Object.keys(t).some(k => /^(abandoned|disused|was):/.test(k));
-    q.upsertCourse.run({
-      id: `osm-${e.type}-${e.id}`, name, country, lat, lon,
-      town: clean(t["addr:city"] || t["addr:town"] || t["addr:village"] || t["addr:suburb"] || t.is_in?.split(",")[0]),
-      website: site(t.website || t["contact:website"] || t.url),
-      phone: clean(t.phone || t["contact:phone"]), email: clean(t.email || t["contact:email"]),
-      holes: Number.isFinite(holes) ? holes : null, hidden: hide ? 1 : 0
-    });
-    added++; if (hide) hidden++;
-  }
-  return { added, hidden };
-});
+const save = saveElements;
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const full = process.argv.includes("--full");

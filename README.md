@@ -39,7 +39,7 @@ npm run seed:sample                    # 7 Aberdeen clubs, for a quick try
 node --env-file=.env src/server.js     # http://localhost:3000
 ```
 
-For the full UK & Ireland directory, run `npm run import:osm`. It takes a few minutes and is safe to re-run.
+For the full UK & Ireland directory, run `npm run import:geofabrik`. It downloads the OpenStreetMap files for the UK and Ireland from Geofabrik (about 2 GB), keeps only the golf courses, and takes roughly 10 minutes. It needs `osmium-tool` (`apt install osmium-tool`), which the Docker image already includes. `npm run import:osm` is an alternative that uses the public Overpass servers instead; it is slow when they're busy.
 
 ### Test live tee times for a club
 
@@ -80,7 +80,7 @@ This setup is for a server that already runs nginx on ports 80 and 443 (for exam
    sudo nginx -t && sudo systemctl reload nginx
    sudo certbot --nginx -d golf.yourdomain.co.uk
    ```
-4. **Open your subdomain.** On first start, the app imports the UK & Ireland course directory in the background, which takes about 5 minutes. Watch with `docker compose logs -f app`.
+4. **Open your subdomain.** On first start, the app imports the UK & Ireland course directory in the background, which takes about 10 minutes. Watch with `docker compose logs -f app`. To re-run it by hand, use `docker compose exec app npm run import:geofabrik`. Refresh it monthly to pick up new clubs and website changes.
 
 **Day to day**
 ```bash
