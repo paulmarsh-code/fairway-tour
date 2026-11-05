@@ -15,11 +15,11 @@ export async function enrichCourse(row) {
   const pages = await withPage(async page => {
     const out = [];
     await open(page, row.website);
-    out.push({ url: page.url(), text: await pageText(page, 6000) });
+    out.push({ url: page.url(), text: await pageText(page, 5000) });
     const links = (await pageLinks(page)).filter(l => sameSite(l.href, row.website) && USEFUL.test(`${l.text} ${l.href}`));
     const seen = new Set([page.url()]);
     for (const l of links) {
-      if (out.length >= 6) break;
+      if (out.length >= 5) break;
       const href = l.href.split("#")[0];
       if (seen.has(href)) continue;
       seen.add(href);
@@ -37,7 +37,7 @@ Reply only JSON:
  "buggy":{"price":number|null,"note":""},"trolley":{"pull":number|null,"electric":number|null},
  "catering":{"summary":"","items":[{"item":"","price":number|null}]},
  "practice":"","handicapLimit":"","dressCode":"","bookingEmail":null,"bookingPhone":null,"sources":["urls used"]}
-${pages.map(p => `\n=== ${p.url}\n${p.text}`).join("\n").slice(0, 60000)}`, { maxTokens: 3000 });
+${pages.map(p => `\n=== ${p.url}\n${p.text}`).join("\n").slice(0, 24000)}`, { maxTokens: 2000 });
 
   const details = { ...j, checkedAt: new Date().toISOString() };
   q.setDetails.run(JSON.stringify(details), row.id);

@@ -9,7 +9,7 @@ import { forecast } from "./weather.js";
 import { getTeeSheets, pruneCache } from "./teetimes/index.js";
 import { detectBooking } from "./detect.js";
 import { enrichCourse, fetchRating } from "./enrich.js";
-import { aiEnabled } from "./ai.js";
+import { aiEnabled, spendThisMonth } from "./ai.js";
 import { closeBrowser } from "./browser.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -41,7 +41,7 @@ app.setErrorHandler((err, req, reply) => {
 });
 
 // --- health -------------------------------------------------------------------
-app.get("/api/health", async () => ({ ok: true, ai: aiEnabled(), reviews: !!config.googlePlacesKey }));
+app.get("/api/health", async () => ({ ok: true, ai: aiEnabled(), aiSpend: config.anthropicKey ? spendThisMonth() : null, reviews: !!config.googlePlacesKey }));
 
 // --- course search --------------------------------------------------------------
 app.get("/api/search", async req => {

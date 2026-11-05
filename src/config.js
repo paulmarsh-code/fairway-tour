@@ -18,7 +18,13 @@ export const config = {
 
   // Optional services
   anthropicKey: process.env.ANTHROPIC_API_KEY || "",
-  anthropicModel: process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
+  // Haiku is the cheapest model and is plenty for reading club web pages.
+  anthropicModel: process.env.ANTHROPIC_MODEL || "claude-haiku-5-5",
+  aiMonthlyBudgetGbp: Number(process.env.AI_MONTHLY_BUDGET_GBP || 10),
+  // Price per million tokens in USD for the model above; check the Anthropic pricing page and adjust.
+  aiPriceInUsd: Number(process.env.AI_PRICE_IN_USD || 1),
+  aiPriceOutUsd: Number(process.env.AI_PRICE_OUT_USD || 5),
+  usdToGbp: Number(process.env.USD_TO_GBP || 0.8),
   googlePlacesKey: process.env.GOOGLE_PLACES_API_KEY || "",
 
   // Admin endpoints (course edits) are disabled unless a token is set.
