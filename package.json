@@ -14,6 +14,7 @@
     "add-club": "node scripts/add-club.js",
     "detect:booking": "node scripts/detect-booking.js",
     "check": "node scripts/check-course.js",
+    "inspect": "node scripts/inspect-site.js",
     "enrich": "node scripts/enrich.js",
     "test": "node --test"
   },
