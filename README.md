@@ -82,6 +82,16 @@ This setup is for a server that already runs nginx on ports 80 and 443 (for exam
    ```
 4. **Open your subdomain.** On first start, the app imports the UK & Ireland course directory in the background, which takes about 10 minutes. Watch with `docker compose logs -f app`. To re-run it by hand, use `docker compose exec app npm run import:geofabrik`. Refresh it monthly to pick up new clubs and website changes.
 
+**Course directory refresh (monthly).** Run it as a one-off container with extra memory, so the map tool isn't held to the app's 1.5 GB cap:
+```bash
+docker run --rm -m 8g -v fairway-tour_fairway-data:/data fairway-tour-app npm run import:geofabrik
+```
+
+**Add a club the map data is missing.** In Google Maps, right-click the course and click the numbers at the top of the menu to copy its coordinates. Then:
+```bash
+docker compose exec app npm run add-club -- "Club name" 57.2575 -2.0337 https://clubwebsite.co.uk "Town"
+```
+
 **Day to day**
 ```bash
 git pull && docker compose up -d --build                          # update

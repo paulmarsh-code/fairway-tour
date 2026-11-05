@@ -16,6 +16,7 @@ import { pathToFileURL } from "node:url";
 import { db } from "../src/db.js";
 import { config, userAgent } from "../src/config.js";
 import { saveElements } from "./osm-common.js";
+import { milesBetween } from "../src/geo.js";
 
 // Ireland first, then the UK: Northern Ireland is in both files, and the later
 // UK pass sets those clubs to GB.
@@ -75,23 +76,59 @@ export function featureToElement(f) {
   return { type, id, lat: c.lat, lon: c.lon, tags: f.properties || {} };
 }
 
+const DONOR_MILES = 1.2;
+/**
+ * Many courses are drawn on the map as an outline with no name, while the name, website and
+ * phone sit on a separate point for the club or clubhouse. Copy those details across from the
+ * nearest named golf club/clubhouse point. Mutates and returns counts.
+ */
+export function borrowFromNearby(courses, donors) {
+  let named = 0, websites = 0;
+  for (const c of courses) {
+    const t = c.tags || (c.tags = {});
+    const needName = !t.name, needSite = !(t.website || t["contact:website"] || t.url);
+    if (!needName && !needSite) continue;
+    let best = null, bestD = Infinity;
+    for (const d of donors) {
+      const dist = milesBetween(c, d);
+      if (dist < bestD && dist <= DONOR_MILES) { best = d; bestD = dist; }
+    }
+    if (!best) continue;
+    const b = best.tags;
+    if (needName) { t.name = b.name; named++; }
+    if (needSite && (b.website || b["contact:website"] || b.url) && (!needName ? similarName(t.name, b.name) : true)) {
+      t.website = b.website || b["contact:website"] || b.url; websites++;
+    }
+    for (const k of ["phone", "contact:phone", "email", "contact:email", "addr:town", "addr:city", "addr:village"]) if (!t[k] && b[k]) t[k] = b[k];
+  }
+  return { named, websites };
+}
+
+// Only borrow a website for an already-named course if the names look like the same club
+const words = s => new Set(String(s).toLowerCase().replace(/golf|club|course|links|the|&|and|ltd/g, " ").split(/\W+/).filter(w => w.length > 2));
+export function similarName(a, b) { const A = words(a), B = words(b); return [...A].some(w => B.has(w)); }
+
 async function importFile(pbf, country, work) {
   const golf = path.join(work, `golf-${country}.osm.pbf`);
   const json = path.join(work, `golf-${country}.geojsonseq`);
   console.log("  keeping only golf courses…");
-  await run("osmium", ["tags-filter", pbf, "nwr/leisure=golf_course", "-o", golf, "--overwrite", "--progress"]);
+  await run("osmium", ["tags-filter", pbf, "nwr/leisure=golf_course", "nwr/club=golf", "nwr/golf=clubhouse", "nwr/sport=golf", "-o", golf, "--overwrite", "--progress"]);
   await run("osmium", ["export", golf, "-f", "geojsonseq", "-o", json, "--overwrite", "--add-unique-id=type_id", "--geometry-types=point,linestring,polygon"]);
 
-  const seen = new Map();
+  const seen = new Map(), donors = [];
   const rl = readline.createInterface({ input: fs.createReadStream(json) });
   for await (let line of rl) {
     line = line.replace(/^\x1e/, "").trim();
     if (!line) continue;
     let f; try { f = JSON.parse(line); } catch { continue; }
-    if (f.properties?.leisure !== "golf_course") continue; // skip the ways that only carry geometry
+    const t = f.properties || {};
     const el = featureToElement(f);
-    if (el) seen.set(`${el.type}/${el.id}`, el); // an area replaces its plain-way duplicate
+    if (!el) continue;
+    if (t.leisure === "golf_course") seen.set(`${el.type}/${el.id}`, el); // an area replaces its plain-way duplicate
+    else if (t.name && (t.club === "golf" || t.golf === "clubhouse" || t.sport === "golf")) donors.push(el);
   }
+  const fixed = borrowFromNearby([...seen.values()], donors);
+  console.log(`  ${fixed.named} unnamed courses named from a nearby golf club or clubhouse; ${fixed.websites} websites borrowed.`);
   const r = saveElements(country, [...seen.values()]);
   console.log(`${country}: ${r.added} courses saved (${r.hidden} hidden as pitch & putt / mini golf / disused).`);
   fs.rmSync(golf, { force: true }); fs.rmSync(json, { force: true });
