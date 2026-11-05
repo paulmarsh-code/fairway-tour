@@ -1,0 +1,17 @@
+<!doctype html><html><head><title>Visitors booking</title></head><body>
+<h1>KING'S LINKS GOLF COURSE</h1><p>VISITORS BOOKING</p>
+<div id="days"></div><p>Sunrise 07:27 Sunset 16:15</p><div id="sheet"></div>
+<button onclick="window.booked=true">Book now</button>
+<script>
+const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const days = [1, 2, 3].map(n => ({ iso: iso(n), label: new Date(iso(n) + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric" }) }));
+const sheets = { 0: ["11:14", "11:38"], 1: ["09:10", "10:20", "12:30"], 2: [] };
+let sel = 0;
+function render() {
+  document.getElementById("days").innerHTML = days.map((d, i) => `<button class="day ${i === sel ? "active" : ""}" data-i="${i}">${d.label}</button>`).join("");
+  document.querySelectorAll(".day").forEach(b => b.onclick = () => { sel = +b.dataset.i; setTimeout(render, 200); });
+  document.getElementById("sheet").innerHTML = sheets[sel].map(t => `<div class="slot"><span class="t">${t}</span>
+    <button>1 Player - £24.50</button><button>2 Player - £49.00</button><button>3 Player - £73.50</button><button>4 Player - £98.00</button></div>`).join("") || "<p>No tee times available</p>";
+}
+setTimeout(render, 300);
+</script></body></html>

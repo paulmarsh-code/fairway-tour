@@ -5,6 +5,7 @@ import { q, rowToCourse } from "../db.js";
 import { withPage, open, pageText, pageLinks } from "../browser.js";
 import { aiEnabled, askJson } from "../ai.js";
 import { parseRows, parseText, dateShown, fillTemplate } from "./parse.js";
+import { goToDate } from "./navigator.js";
 import { systemById, detectSystem, templateFromDatedUrl } from "./systems.js";
 
 const LOGIN = /\b(log ?in|sign ?in|password|member number|register to book)\b/i;
@@ -26,7 +27,10 @@ async function extractRows(page) {
       }
       if (seen.has(row)) continue;
       seen.add(row);
-      const text = (row.innerText || "").replace(/\s+/g, " ").trim().slice(0, 300);
+      // Join the row's text pieces with spaces: inline buttons ("£24.50" "2 Player") would otherwise run together
+      const parts = [], walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) { const t = n.textContent.trim(); if (t) parts.push(t); }
+      const text = parts.join(" ").replace(/\s+/g, " ").slice(0, 300);
       // Skip containers that hold several different times (whole tables), keep row-sized ones
       const times = text.match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/g) || [];
       if (new Set(times).size > 2) continue;
@@ -56,8 +60,17 @@ async function loadSheet(page, url, date, players) {
 const signature = times => times.map(t => `${t.time}/${t.price ?? ""}`).join(",");
 
 async function readSheet(page, course, url, date, players) {
-  const { shown, times: found, text } = await loadSheet(page, url, date, players);
-  let times = found, note = "";
+  await open(page, url);
+  return readOpenPage(page, course, url, date, players, false);
+}
+
+/** Read the tee sheet already showing in the page. `confirmed` = the navigator confirmed the date. */
+async function readOpenPage(page, course, url, date, players, confirmed) {
+  const text = await pageText(page, 20000);
+  const shown = confirmed || dateShown(text, date);
+  let times = parseRows(await extractRows(page), { players });
+  if (!times.length) times = parseText(text, { players });
+  let note = "";
 
   if (!times.length && shown && aiEnabled() && /\b([01]?\d|2[0-3])[:.][0-5]\d\b/.test(text)) {
     try {
@@ -163,9 +176,18 @@ export async function getTeeSheets(courseId, dates, players = 4) {
         const out = {};
         const tpl = await resolveTemplate(page, row);
         let baseline = null; // tomorrow's sheet, to spot booking pages that ignore far-off dates
+        let opened = false;   // navigator: booking page loaded once, then clicked from day to day
         for (const d of missing) {
           let r;
-          if (!tpl) r = { status: "manual", times: [], note: "This booking system doesn't let us open a date directly. Use the booking page.", url: row.booking_url };
+          if (!tpl && aiEnabled()) {
+            try {
+              if (!opened) { await open(page, row.booking_url); opened = true; }
+              const nav = await goToDate(page, course.name, d);
+              if (nav.ok) r = await readOpenPage(page, course, row.booking_url, d, players, true);
+              else if (nav.notOpen) r = { status: "not_open", times: [], note: "Not open for online booking yet. Clubs open visitor tee times a set number of days ahead.", url: row.booking_url };
+              else r = { status: "manual", times: [], note: "Couldn't find this date on the club's booking page. Use the booking page.", url: row.booking_url };
+            } catch (e) { if (process.env.DEBUG_NAV) console.error(e); r = { status: "error", times: [], note: "The booking page didn't load", url: row.booking_url }; opened = false; }
+          } else if (!tpl) r = { status: "manual", times: [], note: "This booking system doesn't let us open a date directly. Use the booking page.", url: row.booking_url };
           else {
             try {
               r = await readSheet(page, course, fillTemplate(tpl, d), d, players);

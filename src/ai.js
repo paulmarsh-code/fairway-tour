@@ -25,6 +25,15 @@ export function spendThisMonth() {
 export const aiEnabled = () => !!config.anthropicKey && spendThisMonth().gbp < config.aiMonthlyBudgetGbp;
 
 export async function askJson(prompt, { maxTokens = 2000 } = {}) {
+  try { return await askOnce(prompt, maxTokens); }
+  catch (e) {
+    // An answer cut off at the length cap isn't valid JSON: try once more with room to finish.
+    if (e.truncated) return askOnce(prompt + "\nKeep the reply short: at most 6 items in any list.", Math.min(maxTokens * 2, 8000));
+    throw e;
+  }
+}
+
+async function askOnce(prompt, maxTokens) {
   if (!config.anthropicKey) throw new Error("ANTHROPIC_API_KEY not set");
   if (!aiEnabled()) throw new Error("Monthly AI budget reached");
   const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -40,7 +49,8 @@ export async function askJson(prompt, { maxTokens = 2000 } = {}) {
   const j = await r.json();
   addUsage.run(month(), j.usage?.input_tokens || 0, j.usage?.output_tokens || 0);
   const text = (j.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-  return extractJson(text);
+  try { return extractJson(text); }
+  catch (e) { if (j.stop_reason === "max_tokens") e.truncated = true; throw e; }
 }
 
 export function extractJson(text) {

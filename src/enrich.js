@@ -55,10 +55,10 @@ export async function enrichCourse(row) {
     return out;
   });
 
-  const j = await askJson(`Pages from the website of ${row.name} (${row.town}), checked ${new Date().toISOString().slice(0, 10)}. Extract ONLY what the pages state; use null (or []) when not stated — never guess. Prices in GBP or EUR as shown; prefer visitor rates and include winter rates if shown. For conditions, use only a course status / course update notice on these pages.
+  const j = await askJson(`Pages from the website of ${row.name} (${row.town}), checked ${new Date().toISOString().slice(0, 10)}. Extract ONLY what the pages state; use null (or []) when not stated — never guess. Keep it compact: at most 6 tees, 8 green fees, 5 offers, 8 catering items, short strings. Prices in GBP or EUR as shown; prefer visitor rates and include winter rates if shown. For conditions, use only a course status / course update notice on these pages.
 Reply only JSON:
 ${DETAILS_SCHEMA.replace('${"CONDITIONS"}', CONDITIONS)}
-${pages.map(p => `\n=== ${p.url}\n${p.text}`).join("\n").slice(0, 45000)}`, { maxTokens: 2500 });
+${pages.map(p => `\n=== ${p.url}\n${p.text}`).join("\n").slice(0, 45000)}`, { maxTokens: 4000 });
 
   const now = new Date().toISOString();
   const details = { ...j, checkedAt: now, conditionsCheckedAt: now, pagesRead: pages.map(p => p.url) };
