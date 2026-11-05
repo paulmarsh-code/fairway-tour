@@ -22,6 +22,10 @@ export function pricesIn(text) {
 
 export function spacesIn(text) {
   const s = String(text || "");
+  // BRS-style slots offer one button per group size ("1 Player - £24.50 … 4 Player - £98.00"):
+  // the largest size offered is the number of spaces left.
+  const sizes = [...s.matchAll(/\b(\d)\s*players?\s*[-–:]\s*(?:£|€)/gi)].map(m => Number(m[1]));
+  if (sizes.length) return Math.max(...sizes);
   let m = /(\d)\s*(?:spaces?|slots?|places?|players?)\s*(?:available|left|free|remaining)?/i.exec(s);
   if (m) return Number(m[1]);
   m = /\b(\d)\s*\/\s*4\b/.exec(s); // "2/4" style: booked/capacity

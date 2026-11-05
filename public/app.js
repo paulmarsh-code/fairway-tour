@@ -135,8 +135,15 @@ async function loadDetails(id) {
   if (S.enriching[id]) return;
   S.enriching[id] = "loading";
   const c = course(id);
-  if (!c.enrichedAt) { try { S.courses[id] = { ...c, ...(await api(`/api/courses/${id}/enrich`, { method: "POST" })) }; } catch {} }
+  if (!c.enrichedAt) {
+    try { S.courses[id] = { ...c, ...(await api(`/api/courses/${id}/enrich`, { method: "POST" })) }; }
+    catch (e) { S.courses[id] = { ...c, enrichError: e.message }; }
+  }
   S.enriching[id] = "done";
+  renderCourses();
+  if (det(course(id)).statusUrl) {
+    try { const r = await api(`/api/courses/${id}/conditions`, { method: "POST" }); S.courses[id] = { ...course(id), details: { ...det(course(id)), conditions: r.conditions, conditionsCheckedAt: r.checkedAt } }; } catch {}
+  }
   if (!S.weather[id]) { try { S.weather[id] = await api(`/api/weather?lat=${c.lat}&lon=${c.lon}&dates=${tripDays().join(",")}`); } catch { S.weather[id] = { error: true }; } }
   renderCourses();
 }
@@ -204,8 +211,9 @@ function liveStrip(c) {
     if (!x) return `<span class="ad limited" title="${esc(longDate(d))}: not checked">${p.dw.slice(0, 2)}<br>${p.dn}<br><b>–</b></span>`;
     const n = x.times.length;
     const cls = x.status === "available" ? "open" : x.status === "none" ? "members" : "limited";
-    const tip = n ? `${n} free: ${x.times.slice(0, 8).map(t => t.time).join(", ")}` : ({ none: "Nothing free", login: "Booking system needs a login", manual: "Open the booking page", wrong_date: "Couldn't open this date", unverified_date: "Couldn't confirm the date shown" }[x.status] || x.note || "Check manually");
-    return `<span class="ad ${cls}${plays.has(d) ? " play" : ""}" title="${esc(longDate(d))}: ${esc(tip)}">${p.dw.slice(0, 2)}<br>${p.dn}<br><b>${n || (cls === "members" ? "0" : "?")}</b></span>`;
+    const mark = x.status === "not_open" ? "–" : null;
+    const tip = n ? `${n} free: ${x.times.slice(0, 8).map(t => t.time).join(", ")}` : ({ none: "Nothing free", not_open: "Not open for online booking yet", login: "Booking system needs a login", manual: "Open the booking page", wrong_date: "Couldn't open this date", unverified_date: "Couldn't confirm the date shown" }[x.status] || x.note || "Check manually");
+    return `<span class="ad ${cls}${plays.has(d) ? " play" : ""}" title="${esc(longDate(d))}: ${esc(tip)}">${p.dw.slice(0, 2)}<br>${p.dn}<br><b>${n || mark || (cls === "members" ? "0" : "?")}</b></span>`;
   }).join("")}</div>`;
 }
 function courseCard(c) {
@@ -251,30 +259,41 @@ function details(c) {
   const maps = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(`${c.lat},${c.lon}`);
   const wDays = W && !W.error ? tripDays().map(x => [x, W.days?.[x]]) : [];
   const enrichPending = S.enriching[c.id] === "loading";
+  const read = !!c.enrichedAt; // the club's website has been read
+  const missing = enrichPending ? "Checking the club's website…" : c.enrichError ? c.enrichError : read ? "Not published by the club" : "—";
+  const val = v => (v == null || v === "" ? `<span class="note">${esc(missing)}</span>` : esc(v));
+  const C = d.conditions || null;
+  const yn = v => (v === true ? "Yes" : v === false ? "No" : null);
+  const condRows = C ? [["Course", C.status && C.status !== "unknown" ? C.status[0].toUpperCase() + C.status.slice(1) : null], ["Temporary greens", yn(C.temporaryGreens)], ["Temporary tees", yn(C.temporaryTees)], ["Fairway mats", yn(C.mats)], ["Buggies", C.buggies], ["Trolleys", C.trolleys], ["Maintenance", C.maintenance]].filter(([, v]) => v) : [];
   return `<div class="c-body">
     <div><span class="label">Live tee times</span>
-      ${L?.dates && Object.keys(L.dates).length ? `<div class="price-list">${Object.entries(L.dates).sort().map(([x, v]) => `<div><span>${esc(longDate(x))}</span><span>${v.times.length ? v.times.slice(0, 10).map(t => esc(t.time) + (t.price != null ? ` (${money(t.price, cc)})` : "")).join(", ") + (v.times.length > 10 ? ` +${v.times.length - 10}` : "") : esc(v.note || ({ none: "Nothing free", login: "Needs a login", manual: "Use the booking page" }[v.status] || "Check manually"))}</span></div>`).join("")}</div>`
+      ${L?.dates && Object.keys(L.dates).length ? `<div class="price-list">${Object.entries(L.dates).sort().map(([x, v]) => `<div><span>${esc(longDate(x))}</span><span>${v.times.length ? v.times.slice(0, 10).map(t => esc(t.time) + (t.price != null ? ` (${money(t.price, cc)})` : "")).join(", ") + (v.times.length > 10 ? ` +${v.times.length - 10}` : "") : esc(v.note || ({ none: "Nothing free", not_open: "Not open for booking yet", login: "Needs a login", manual: "Use the booking page" }[v.status] || "Check manually"))}</span></div>`).join("")}</div>`
         : `<p class="note">Tap Live tee times to read the club's booking page.</p>`}
       ${c.bookingUrl ? `<a href="${esc(c.bookingUrl)}" target="_blank" rel="noopener">Open the club's booking page ↗</a>` : ""}</div>
     <div><span class="label">Weather forecast</span>
       ${!W ? `<div class="loading-row"><span class="spin"></span> Loading forecast…</div>` : W.error ? `<p class="note">Forecast unavailable.</p>`
         : `<div class="wx">${wDays.map(([x, w]) => w ? `<div>${esc(longDate(x))}<b>${Math.round(w.high)}° / ${Math.round(w.low)}°</b>${esc(w.summary)}<br>Rain ${w.rainChance ?? "–"}% · Wind ${Math.round(w.windMph ?? 0)} mph<br>Sunset ${esc(w.sunset || "–")}</div>` : `<div>${esc(longDate(x))}<b>–</b>Not out yet</div>`).join("")}</div><p class="note">Forecasts reach about 16 days ahead${W.forecastUntil ? ` (currently to ${esc(longDate(W.forecastUntil))})` : ""}.</p>`}</div>
     <div><span class="label">Tees</span>
-      ${tees.length ? `<div class="tbl-wrap"><table><thead><tr><th>Tee</th><th>Yards</th><th>Par</th><th>Rating</th><th>Slope</th></tr></thead><tbody>${tees.map(t => `<tr><td>${esc(t.name)}</td><td>${num(t.yards)?.toLocaleString("en-GB") ?? "–"}</td><td>${num(t.par) ?? num(d.par) ?? "–"}</td><td>${num(t.rating) ?? "–"}</td><td>${num(t.slope) ?? "–"}</td></tr>`).join("")}</tbody></table></div>`
-        : enrichPending ? `<div class="loading-row"><span class="spin"></span> Reading the club's website…</div>` : `<p class="note">Not listed on the club's website.</p>`}</div>
+      ${tees.length ? `<div class="tbl-wrap"><table><thead><tr><th>Tee</th><th>Yards</th><th>Par</th><th>Rating</th><th>Slope</th></tr></thead><tbody>${tees.map(t => `<tr><td>${esc(t.name || "—")}</td><td>${num(t.yards)?.toLocaleString("en-GB") ?? "–"}</td><td>${num(t.par) ?? num(d.par) ?? "–"}</td><td>${num(t.rating) ?? "–"}</td><td>${num(t.slope) ?? "–"}</td></tr>`).join("")}</tbody></table></div>`
+        : enrichPending ? `<div class="loading-row"><span class="spin"></span> Reading the club's website…</div>` : `<p class="note">${esc(missing)}</p>`}</div>
+    <div><span class="label">Course conditions</span>
+      ${condRows.length ? `<div class="price-list">${condRows.map(([k, v]) => `<div><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join("")}</div>` : `<p class="note">${esc(enrichPending ? missing : read ? (d.statusUrl ? "No current notice on the club's status page" : "The club doesn't publish a course status page we can read. Call the club for today's conditions.") : missing)}</p>`}
+      ${C?.notes ? `<p class="note">${esc(C.notes)}</p>` : ""}
+      ${C?.updated || d.conditionsCheckedAt ? `<p class="note">${C?.updated ? `Club update: ${esc(C.updated)}. ` : ""}${d.conditionsCheckedAt ? `Checked ${esc(new Date(d.conditionsCheckedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))}.` : ""}</p>` : ""}
+      ${d.statusUrl ? `<a href="${esc(d.statusUrl)}" target="_blank" rel="noopener">Club's course status page ↗</a>` : ""}</div>
     <div><span class="label">Green fees & offers</span>
-      ${fees.length ? `<div class="price-list">${fees.map(f => `<div><span>${esc(f.label)}</span><span>${money(num(f.price), cc)}</span></div>`).join("")}</div>` : `<p class="note">${enrichPending ? "Checking…" : "Not listed — see live prices or ask the club."}</p>`}
+      ${fees.length ? `<div class="price-list">${fees.map(f => `<div><span>${esc(f.label)}</span><span>${money(num(f.price), cc)}</span></div>`).join("")}</div>` : `<p class="note">${esc(read && !enrichPending ? "Not published by the club. Tap Live tee times for current prices." : missing)}</p>`}
       ${(d.offers || []).filter(Boolean).length ? `<ul class="plain">${d.offers.filter(Boolean).map(o => `<li>${esc(o)}</li>`).join("")}</ul>` : ""}
       <div class="field"><label class="label" for="fee-${esc(c.id)}">Confirmed price per golfer (${esc(cc)})</label>
         <input id="fee-${esc(c.id)}" type="number" inputmode="decimal" min="0" data-fee="${esc(c.id)}" placeholder="Enter once confirmed" value="${num(T.confirmed[c.id]) ?? ""}"></div></div>
-    <div><span class="label">Visitors</span><p>${esc(d.visitorTimes || "—")}</p>${d.handicapLimit ? `<p class="note">Handicap: ${esc(d.handicapLimit)}</p>` : ""}${d.dressCode ? `<p class="note">Dress code: ${esc(d.dressCode)}</p>` : ""}</div>
-    <div><span class="label">Food & hospitality</span><p>${esc(d.catering?.summary || "—")}</p>
+    <div><span class="label">Visitors</span><p>${val(d.visitorTimes)}</p>${d.bookingWindow ? `<p class="note">Booking window: ${esc(d.bookingWindow)}</p>` : ""}${d.handicapLimit ? `<p class="note">Handicap: ${esc(d.handicapLimit)}</p>` : ""}${d.dressCode ? `<p class="note">Dress code: ${esc(d.dressCode)}</p>` : ""}</div>
+    <div><span class="label">Food & hospitality</span><p>${val(d.catering?.summary)}</p>
       ${items.length ? `<div class="price-list">${items.map(i => `<div><span>${esc(i.item)}</span><span>${money(num(i.price), cc)}</span></div>`).join("")}</div>` : ""}</div>
     <div><span class="label">Buggy & trolley hire</span><div class="price-list">
       <div><span>Buggy${d.buggy?.note ? ` · ${esc(d.buggy.note)}` : ""}</span><span>${money(num(d.buggy?.price), cc)}</span></div>
       <div><span>Pull trolley</span><span>${money(num(d.trolley?.pull), cc)}</span></div>
       <div><span>Electric trolley</span><span>${money(num(d.trolley?.electric), cc)}</span></div></div></div>
-    <div><span class="label">Practice facilities</span><p>${esc(d.practice || "—")}</p></div>
+    <div><span class="label">Practice facilities</span><p>${val(d.practice)}</p></div>
     <div><span class="label">Contact & directions</span>
       ${c.website ? `<p><a href="${esc(c.website)}" target="_blank" rel="noopener">Club website ↗</a></p>` : ""}
       ${(c.phone || d.bookingPhone) ? `<p>Phone: <span class="mail-addr">${esc(d.bookingPhone || c.phone)}</span></p>` : ""}

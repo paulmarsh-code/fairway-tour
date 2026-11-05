@@ -44,6 +44,13 @@ test("parseText reads tee sheet text without borrowing the next row's price", ()
   assert.deepEqual(out.map(t => t.time), ["09:30", "09:50"]);
 });
 
+test("BRS slots: '1 Player - £24.50 … 4 Player - £98.00' means 4 spaces at £24.50 each", () => {
+  const row = "09:10 1 Player - £24.50 2 Player - £49.00 3 Player - £73.50 4 Player - £98.00";
+  assert.equal(spacesIn(row), 4);
+  const out = parseRows([{ time: "09:10", text: row, hasAction: true }, { time: "09:20", text: "09:20 1 Player - £24.50 2 Player - £49.00", hasAction: true }], { players: 4 });
+  assert.deepEqual(out, [{ time: "09:10", price: 24.5, spaces: 4 }]);
+});
+
 test("spacesIn handles common formats", () => {
   assert.equal(spacesIn("3 spaces"), 3);
   assert.equal(spacesIn("1/4"), 3);

@@ -83,6 +83,7 @@ export const q = {
   setBooking: db.prepare("UPDATE courses SET booking_system=?, booking_url=?, website=COALESCE(NULLIF(?, ''), website), detected_at=datetime('now'), updated_at=datetime('now') WHERE id=?"),
   setContact: db.prepare("UPDATE courses SET email=?, phone=?, updated_at=datetime('now') WHERE id=?"),
   setTemplate: db.prepare("UPDATE courses SET date_template=?, updated_at=datetime('now') WHERE id=?"),
+  setDetailsOnly: db.prepare("UPDATE courses SET details=?, updated_at=datetime('now') WHERE id=?"),
   setDetails: db.prepare("UPDATE courses SET details=?, enriched_at=datetime('now'), updated_at=datetime('now') WHERE id=?"),
   setRating: db.prepare("UPDATE courses SET rating=?, rating_count=?, updated_at=datetime('now') WHERE id=?"),
   setRank: db.prepare("UPDATE courses SET rank_label=?, rank_score=?, updated_at=datetime('now') WHERE id=?"),

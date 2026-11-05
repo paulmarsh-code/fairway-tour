@@ -40,13 +40,24 @@ async function extractRows(page) {
   }).catch(() => []);
 }
 
-async function readSheet(page, course, url, date, players) {
+const ukToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+const addDays = (iso, n) => { const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const NOT_OPEN = /(too far in advance|not (yet )?(open|available) for (online )?booking|bookings? (open|opens|are available) \d+|can only be made \d+ days|in advance of the date|no tee times (are )?available|no times available)/i;
+
+/** Open a tee sheet URL and read what is free. Returns {shown, times, text}. */
+async function loadSheet(page, url, date, players) {
   await open(page, url);
   const text = await pageText(page, 20000);
   const shown = dateShown(text, date);
   let times = parseRows(await extractRows(page), { players });
   if (!times.length) times = parseText(text, { players });
-  let note = "";
+  return { shown, times, text };
+}
+const signature = times => times.map(t => `${t.time}/${t.price ?? ""}`).join(",");
+
+async function readSheet(page, course, url, date, players) {
+  const { shown, times: found, text } = await loadSheet(page, url, date, players);
+  let times = found, note = "";
 
   if (!times.length && shown && aiEnabled() && /\b([01]?\d|2[0-3])[:.][0-5]\d\b/.test(text)) {
     try {
@@ -63,14 +74,19 @@ ${text.slice(0, 14000)}`, { maxTokens: 1500 });
 
   let status;
   if (times.length) status = shown ? "available" : "unverified_date";
-  else if (!shown && LOGIN.test(text)) status = "login";
-  else if (!shown) status = "wrong_date";
-  else status = "none";
-  return { status, times: status === "unverified_date" ? times : times, note, url };
+  else if (shown) status = "none";
+  else if (NOT_OPEN.test(text) || date > addDays(ukToday(), 2)) { status = "not_open"; note ||= "Not open for online booking yet. Clubs open visitor tee times a set number of days ahead."; }
+  else if (LOGIN.test(text)) status = "login";
+  else status = "wrong_date";
+  return { status, times, note, url };
 }
 
-/** Find (and remember) a URL template that opens this course's tee sheet for any date. */
-async function resolveTemplate(page, row, date) {
+/**
+ * Find (and remember) a URL template that opens this course's tee sheet for any date.
+ * Tested on the next two days (always inside a club's booking window), not on the trip date.
+ * A template is accepted if the page shows the date, or if the tee sheet changes with the date.
+ */
+async function resolveTemplate(page, row) {
   if (row.date_template) return row.date_template;
   const bookingUrl = row.booking_url;
   const cands = [];
@@ -78,13 +94,17 @@ async function resolveTemplate(page, row, date) {
   if (sys) { try { cands.push(...sys.candidates(bookingUrl)); } catch {} }
   const dated = templateFromDatedUrl(bookingUrl);
   if (dated) cands.unshift(dated);
+  const d1 = addDays(ukToday(), 1), d2 = addDays(ukToday(), 2);
 
+  const works = async tpl => {
+    const a = await loadSheet(page, fillTemplate(tpl, d1), d1, 1);
+    if (a.shown) return true;
+    const b = await loadSheet(page, fillTemplate(tpl, d2), d2, 1);
+    if (b.shown) return true;
+    return a.times.length > 0 && b.times.length > 0 && signature(a.times) !== signature(b.times);
+  };
   for (const tpl of cands) {
-    try {
-      await open(page, fillTemplate(tpl, date));
-      const text = await pageText(page);
-      if (dateShown(text, date)) { q.setTemplate.run(tpl, row.id); return tpl; }
-    } catch { /* try next */ }
+    try { if (await works(tpl)) { q.setTemplate.run(tpl, row.id); return tpl; } } catch { /* try next */ }
   }
 
   if (!aiEnabled()) return null;
@@ -102,10 +122,7 @@ ${text}
 LINKS:
 ${links}`, { maxTokens: 600 });
     const tpl = typeof j.template === "string" && /^https?:\/\//.test(j.template) && /\{(YYYY|DD|D|MON)\}/.test(j.template) ? j.template : null;
-    if (tpl) {
-      await open(page, fillTemplate(tpl, date));
-      if (dateShown(await pageText(page), date)) { q.setTemplate.run(tpl, row.id); return tpl; }
-    }
+    if (tpl && await works(tpl)) { q.setTemplate.run(tpl, row.id); return tpl; }
   } catch { /* give up */ }
   return null;
 }
@@ -144,13 +161,21 @@ export async function getTeeSheets(courseId, dates, players = 4) {
     if (!inflight.has(key)) {
       inflight.set(key, withPage(async page => {
         const out = {};
-        const tpl = await resolveTemplate(page, row, missing[0]);
+        const tpl = await resolveTemplate(page, row);
+        let baseline = null; // tomorrow's sheet, to spot booking pages that ignore far-off dates
         for (const d of missing) {
           let r;
           if (!tpl) r = { status: "manual", times: [], note: "This booking system doesn't let us open a date directly. Use the booking page.", url: row.booking_url };
           else {
-            try { r = await readSheet(page, course, fillTemplate(tpl, d), d, players); }
-            catch (e) { r = { status: "error", times: [], note: "The booking page didn't load", url: fillTemplate(tpl, d) }; }
+            try {
+              r = await readSheet(page, course, fillTemplate(tpl, d), d, players);
+              if (r.status === "unverified_date") {
+                const t1 = addDays(ukToday(), 1);
+                baseline ??= signature((await loadSheet(page, fillTemplate(tpl, t1), t1, players)).times);
+                if (d !== t1 && signature(r.times) === baseline) r = { status: "not_open", times: [], note: "Not open for online booking yet. Clubs open visitor tee times a set number of days ahead.", url: r.url };
+                else r.status = "available";
+              }
+            } catch (e) { r = { status: "error", times: [], note: "The booking page didn't load", url: fillTemplate(tpl, d) }; }
           }
           const at = Date.now();
           if (r.status !== "error") q.putSheet.run(courseId, d, players, at, JSON.stringify(r));

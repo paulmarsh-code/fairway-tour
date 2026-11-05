@@ -8,7 +8,7 @@ import { geocode, milesBetween, boundingBox } from "./geo.js";
 import { forecast } from "./weather.js";
 import { getTeeSheets, pruneCache } from "./teetimes/index.js";
 import { detectBooking } from "./detect.js";
-import { enrichCourse, fetchRating } from "./enrich.js";
+import { enrichCourse, fetchRating, refreshConditions } from "./enrich.js";
 import { aiEnabled, spendThisMonth } from "./ai.js";
 import { closeBrowser } from "./browser.js";
 
@@ -89,11 +89,23 @@ app.post("/api/courses/:id/enrich", async req => {
   const row = q.byId.get(req.params.id);
   if (!row) throw fail(404, "Course not found");
   const stale = !row.enriched_at || Date.now() - Date.parse(row.enriched_at + "Z") > 30 * 86400000;
+  let enrichError = "";
   if (stale) {
-    if (aiEnabled() && row.website) await enrichCourse(row).catch(e => req.log.warn({ err: e.message }, "enrich failed"));
+    if (!aiEnabled()) enrichError = config.anthropicKey ? "Course details are paused until next month (AI budget reached)." : "Course details aren't switched on for this site.";
+    else if (!row.website) enrichError = "We don't have this club's website yet.";
+    else await enrichCourse(row).catch(e => { req.log.warn({ err: e.message }, "enrich failed"); enrichError = "Couldn't read the club's website just now. Try again later."; });
     await fetchRating(row).catch(() => null);
   }
-  return rowToCourse(q.byId.get(row.id));
+  return { ...rowToCourse(q.byId.get(row.id)), enrichError };
+});
+
+// Course conditions from the club's status page, refreshed at most every 12 hours
+app.post("/api/courses/:id/conditions", async req => {
+  limit(req, "conditions", 20);
+  const row = q.byId.get(req.params.id);
+  if (!row) throw fail(404, "Course not found");
+  const d = await refreshConditions(row).catch(e => { req.log.warn({ err: e.message }, "conditions failed"); return null; });
+  return { conditions: d?.conditions || null, checkedAt: d?.conditionsCheckedAt || null, statusUrl: d?.statusUrl || null };
 });
 
 // --- weather --------------------------------------------------------------------

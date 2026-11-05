@@ -97,6 +97,7 @@ docker compose exec app npm run add-club -- "Club name" 57.2575 -2.0337 https://
 git pull && docker compose up -d --build                          # update
 docker compose exec app npm run check -- "Cruden Bay" 2026-12-07  # test one club's live tee times (add --redetect to look for the booking system again)
 docker compose exec app npm run inspect -- https://club-site/visitors/  # what a page reveals about booking, for tuning
+docker compose exec app npm run reset -- all   # re-read course details and tee sheets with the latest code
 docker compose exec app npm run detect:booking -- 500             # pre-find booking systems for 500 clubs
 ```
 The database lives in the Docker volume `fairway-data`. Back it up with:
